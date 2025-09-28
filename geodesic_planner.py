@@ -19,8 +19,8 @@ class GeodesicPlanner:
         # TODO: parameterize this later
         # self.source_vertex = np.array(self.mesh.centroid)  # Use the centroid of the mesh as the source vertex
         # self.source_vertex[2] = 0.5
-        # self.source_vertex = np.array([0.5, 0.5, 0.5])  # Example hardcoded source vertex
-        self.source_vertex = np.array([0, 0, 0])  # Example hardcoded source vertex
+        self.source_vertex = np.array([0.5, 0.5, 0.5])  # Example hardcoded source vertex
+        # self.source_vertex = np.array([0, 0, 0])  # Example hardcoded source vertex
         self.solver = pp3d.MeshHeatMethodDistanceSolver(self.mesh.vertices, self.mesh.faces)
 
 
@@ -58,6 +58,66 @@ class GeodesicPlanner:
         print(f"Number of unique distances: {len(np.unique(distances))}")
         
         return distances
+    
+
+    def find_single_isoline(self, target_distance : float, distances : np.ndarray) -> list:
+        '''
+        Find the vertices that lie on the isoline at the specified distance.
+        Parameters:
+            target_distance: The distance at which to find the isoline.
+            distances: A numpy array of geodesic distances from the source vertex to all other vertices in the mesh.
+        Returns:
+            isoline_vertices: A list of vertices that lie on the isoline at the specified distance
+        '''
+        if distances is None:
+            print("ERROR: Distances are None, cannot compute isolines.")
+            return None
+        # find the isoline vertices
+        isoline_vertices = []
+
+        # iterate through each face of the mesh
+        for face in self.mesh.faces:
+            for i in range(3):
+                v1_index = face[i]
+                v2_index = face[(i + 1) % len(face)]
+                v1_distance = distances[v1_index]
+                v2_distance = distances[v2_index]
+
+                # check if the target distance is within the face
+                if (v1_distance <= target_distance <= v2_distance) or (v2_distance <= target_distance <= v1_distance):
+                    # interpolate the vertex position at the target distance
+                    t = (target_distance - v1_distance) / (v2_distance - v1_distance)
+                    v1_pos = self.mesh.vertices[v1_index]
+                    v2_pos = self.mesh.vertices[v2_index]
+                    interpolated_vertex = v1_pos + t * (v2_pos - v1_pos)
+
+                    isoline_vertices.append(interpolated_vertex)
+        return isoline_vertices
+    
+
+    def compute_isolines(self, target_distance : float, distances : np.ndarray) -> list:
+        ''' 
+        Compute isolines for the entire surface at specified intervals.
+        Parameters:
+            target_distance: The distance at which to compute the isolines.
+            distances: A numpy array of geodesic distances from the source vertex to all other vertices
+        Returns:
+            isolines: A list of lists, where each inner list contains the vertices of an isoline at the specified distance.
+        '''
+        isolines = []
+        max_distance = np.max(distances)
+        max_lines = (int)(max_distance / target_distance)
+
+        
+        isoline_distance = 0.0
+        for i in range(0, max_lines):
+            isoline_distance += target_distance
+            print(f"Computing isoline for distance: {isoline_distance}")
+            isoline = self.find_single_isoline(isoline_distance, distances)
+            isolines.append(isoline)
+    
+        return isolines
+
 
 if __name__ == "__main__":
     planner = GeodesicPlanner('/home/samubuntu/AA_DEVEL/thesis/src/GeodesicSurfaceInformedPlanner/test_geo/01_Hemisphere_base.ply')
@@ -74,6 +134,8 @@ if __name__ == "__main__":
         if len(unique_distances) <= 10:
             print("Unique distances:", unique_distances[:10])
 
+    isolines = planner.compute_isolines(0.2, distances)
+
     # plot the mesh and color vertices by distance
     if distances is not None:
         fig = plt.figure()
@@ -81,4 +143,13 @@ if __name__ == "__main__":
         p = ax.scatter(planner.mesh.vertices[:,0], planner.mesh.vertices[:,1], planner.mesh.vertices[:,2],
                        c=distances, cmap='viridis')
         fig.colorbar(p)
+        
+        # plot the vertices of the isoline in red
+        if isolines is not None:
+            for isoline in isolines:
+                isoline = np.array(isoline)
+                if isoline.size > 0:
+                    ax.scatter(isoline[:,0], isoline[:,1], isoline[:,2], c='r', s=40, label='Isoline')
+            
+        ax.set_title('Geodesic Distances from Source Vertex')
         plt.show()
