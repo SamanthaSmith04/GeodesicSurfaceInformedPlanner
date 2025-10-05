@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import numpy as np
 import potpourri3d as pp3d # https://pypi.org/project/potpourri3d/
 import trimesh
@@ -60,7 +62,7 @@ class GeodesicPlanner:
         return distances
     
 
-    def find_single_isoline(self, target_distance : float, distances : np.ndarray) -> list:
+    def find_single_isoline(self, target_distance : float, distances : np.ndarray) -> (list, list):
         '''
         Find the vertices that lie on the isoline at the specified distance.
         Parameters:
@@ -68,13 +70,14 @@ class GeodesicPlanner:
             distances: A numpy array of geodesic distances from the source vertex to all other vertices in the mesh.
         Returns:
             isoline_vertices: A list of vertices that lie on the isoline at the specified distance
+            normal_vectors: A list of normal vectors of the faces corresponding to the isoline vertices
         '''
         if distances is None:
             print("ERROR: Distances are None, cannot compute isolines.")
             return None
         # find the isoline vertices
         isoline_vertices = []
-
+        normal_vectors = []
         # iterate through each face of the mesh
         for face in self.mesh.faces:
             for i in range(3):
@@ -90,12 +93,16 @@ class GeodesicPlanner:
                     v1_pos = self.mesh.vertices[v1_index]
                     v2_pos = self.mesh.vertices[v2_index]
                     interpolated_vertex = v1_pos + t * (v2_pos - v1_pos)
-
                     isoline_vertices.append(interpolated_vertex)
-        return isoline_vertices
+
+                    # compute the normal vector of the face
+                    face_normal = self.mesh.face_normals[self.mesh.faces.tolist().index(face.tolist())]
+                    normal_vectors.append(face_normal)
+
+        return isoline_vertices, normal_vectors
     
 
-    def compute_isolines(self, target_distance : float, distances : np.ndarray) -> list:
+    def compute_isolines(self, target_distance : float, distances : np.ndarray) -> (list, list):
         ''' 
         Compute isolines for the entire surface at specified intervals.
         Parameters:
@@ -103,8 +110,10 @@ class GeodesicPlanner:
             distances: A numpy array of geodesic distances from the source vertex to all other vertices
         Returns:
             isolines: A list of lists, where each inner list contains the vertices of an isoline at the specified distance.
+            isoline_normals: A list of lists, where each inner list contains the normal vectors of the faces corresponding to the isoline vertices.
         '''
         isolines = []
+        isoline_normals = []
         max_distance = np.max(distances)
         max_lines = (int)(max_distance / target_distance)
 
@@ -113,14 +122,32 @@ class GeodesicPlanner:
         for i in range(0, max_lines):
             isoline_distance += target_distance
             print(f"Computing isoline for distance: {isoline_distance}")
-            isoline = self.find_single_isoline(isoline_distance, distances)
+            isoline, norms = self.find_single_isoline(isoline_distance, distances)
             isolines.append(isoline)
+            isoline_normals.append(norms)
     
-        return isolines
+        return isolines, isoline_normals
+
+    def find_geodesic_paths(self, target_distance: float, source_vertex_index=None) -> (list, list):
+        '''
+        Compute geodesic paths (isolines) at specified intervals from the source vertex.
+        Parameters:
+            target_distance: The distance at which to compute the isolines.
+            source_vertex_index: Optional index of the source vertex in the mesh. If None, uses the closest vertex to self.source_vertex.
+        Returns:
+            isolines: A list of lists, where each inner list contains the vertices of an isoline at the specified distance.
+            isoline_normals: A list of lists, where each inner list contains the normal vectors of the faces corresponding to the isoline vertices.
+        '''
+        distances = self.compute_geodesic_distances(source_vertex_index)
+        if distances is None:
+            print("ERROR: Distances are None, cannot compute geodesic paths.")
+            return None, None
+        isolines, isoline_normals = self.compute_isolines(target_distance, distances)
+        return isolines, isoline_normals
 
 
 if __name__ == "__main__":
-    planner = GeodesicPlanner('/home/samubuntu/AA_DEVEL/thesis/src/GeodesicSurfaceInformedPlanner/test_geo/01_Hemisphere_base.ply')
+    planner = GeodesicPlanner('/Users/samantha/Desktop/Coding/Thesis/GeodesicSurfaceInformedPlanner/test_geo/01_Hemisphere_base.ply')
                               
     print("=== Testing with centroid-based source vertex ===")
     distances = planner.compute_geodesic_distances()
@@ -134,7 +161,10 @@ if __name__ == "__main__":
         if len(unique_distances) <= 10:
             print("Unique distances:", unique_distances[:10])
 
-    isolines = planner.compute_isolines(0.2, distances)
+    isolines, normals = planner.compute_isolines(0.2, distances)
+
+    for i in range(len(normals)):
+        print(f"Isoline {i} has {len(normals[i])} normal vectors.")
 
     # plot the mesh and color vertices by distance
     if distances is not None:

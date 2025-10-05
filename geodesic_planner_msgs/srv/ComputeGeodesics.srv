@@ -1,0 +1,10 @@
+# Request
+string mesh_file_path
+
+geometry_msgs/Point[] sources
+float64 spacing
+
+---
+
+# Response
+geometry_msgs/PoseArray[] geodesic_paths
