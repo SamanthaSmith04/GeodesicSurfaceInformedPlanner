@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'geodesic_planner_node = geodesic_planner_ros2.planner_node:main'
+            'geodesic_planner_server = geodesic_planner_ros2.planner_server:main'
         ],
     },
 )
