@@ -6,6 +6,7 @@ from rclpy.node import Node
 from geodesic_planner_msgs.srv import ComputeGeodesics
 from geodesic_planner_ros2.geodesic_planner import GeodesicPlanner
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 class PlannerServer(Node):
     def __init__(self):
@@ -35,10 +36,19 @@ class PlannerServer(Node):
                 pose.position.x = float(vertex[0])
                 pose.position.y = float(vertex[1])
                 pose.position.z = float(vertex[2])
-                pose.orientation.x = float(normal[0])
-                pose.orientation.y = float(normal[1])
-                pose.orientation.z = float(normal[2])
-                pose.orientation.w = 0.0  # Placeholder for orientation w component
+                
+                # Convert normal vector to quaternion using scipy
+                # Align z-axis with the normal vector
+                normal_normalized = normal / np.linalg.norm(normal)
+                z_axis = np.array([0.0, 0.0, 1.0])
+                rotation = R.align_vectors([normal_normalized], [z_axis])[0]
+                quat = rotation.as_quat()
+                
+                pose.orientation.x = float(quat[0])
+                pose.orientation.y = float(quat[1])
+                pose.orientation.z = float(quat[2])
+                pose.orientation.w = float(quat[3])
+                
                 path.poses.append(pose)
             response.geodesic_paths.append(path)
 
