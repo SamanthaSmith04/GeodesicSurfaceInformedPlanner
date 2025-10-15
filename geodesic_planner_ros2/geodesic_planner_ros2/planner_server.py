@@ -6,7 +6,7 @@ from rclpy.node import Node
 from geodesic_planner_msgs.srv import ComputeGeodesics
 from geodesic_planner_ros2.geodesic_planner import GeodesicPlanner
 import numpy as np
-from scipy.spatial.transform import Rotation as R
+import geodesic_planner_ros2.utils as utils 
 
 class PlannerServer(Node):
     def __init__(self):
@@ -16,12 +16,8 @@ class PlannerServer(Node):
 
     def compute_geodesics_callback(self, request, response):
         planner = GeodesicPlanner(request.mesh_file_path)
-        start = geometry_msgs.msg.Point()
-        start.x = 0.0;
-        start.y = 0.0;
-        start.z = 0.0;
-
-        s= np.array([start.x, start.y, start.z])
+        source_point = request.sources[0]
+        planner.source_vertex = np.array([source_point.x, source_point.y, source_point.z])
         isolines, normals = planner.find_geodesic_paths(request.spacing)
 
         print(f"Computed {len(isolines)} isolines.")
@@ -37,18 +33,11 @@ class PlannerServer(Node):
                 pose.position.y = float(vertex[1])
                 pose.position.z = float(vertex[2])
                 
-                # Convert normal vector to quaternion using scipy
-                # Align z-axis with the normal vector
-                normal_normalized = normal / np.linalg.norm(normal)
-                z_axis = np.array([0.0, 0.0, 1.0])
-                rotation = R.align_vectors([normal_normalized], [z_axis])[0]
-                quat = rotation.as_quat()
-                
-                pose.orientation.x = float(quat[0])
-                pose.orientation.y = float(quat[1])
-                pose.orientation.z = float(quat[2])
-                pose.orientation.w = float(quat[3])
-                
+                rot = utils.z_align_normal(normal[0], normal[1], normal[2])
+                pose.orientation.x = float(rot[0])
+                pose.orientation.y = float(rot[1])
+                pose.orientation.z = float(rot[2])
+                pose.orientation.w = float(rot[3])
                 path.poses.append(pose)
             response.geodesic_paths.append(path)
 

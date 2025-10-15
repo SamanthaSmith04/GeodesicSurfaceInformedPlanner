@@ -62,16 +62,16 @@ def main(args=None):
     
     client = PlannerClient()
     
-    mesh_file_path = "/home/smith.15485/AA_DEVEL/ws_paint/src/GeodesicSurfaceInformedPlanner/geodesic_planner_ros2/test_geo/01_Hemisphere_base.ply"
+    mesh_file_path = "/home/smith.15485/AA_DEVEL/ws_paint/src/GeodesicSurfaceInformedPlanner/geodesic_planner_ros2/test_geo/mas-fender02-mm_scale_noholes.ply"
     spacing = 0.1
     
     sources = []
     source_point = Point()
-    source_point.x = 0.0
-    source_point.y = 0.0
+    source_point.x = 0.5
+    source_point.y = 0.5
     source_point.z = 0.0
     sources.append(source_point)
-    
+
     # Send request
     future = client.send_request(mesh_file_path, sources, spacing)
     
