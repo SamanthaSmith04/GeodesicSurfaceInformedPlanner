@@ -5,6 +5,7 @@ geometry_msgs/Point[] sources
 float64 spacing
 
 ---
-
 # Response
+bool success
+string message
 geometry_msgs/PoseArray[] geodesic_paths

@@ -52,6 +52,9 @@ class PlannerServer(Node):
             all_paths.poses.extend(path.poses)
         publisher.publish(all_paths)
 
+        response.success = True
+        response.message = "Geodesic paths computed successfully."
+
         return response
 
 def main(args=None):
