@@ -9,6 +9,9 @@ import numpy as np
 import geodesic_planner_ros2.utils as utils
 import visualization_msgs
 from visualization_msgs.msg import Marker 
+
+from geodesic_planner_ros2.downsample import downsample
+
 class PlannerServer(Node):
     def __init__(self):
         super().__init__('planner_server')
@@ -45,6 +48,7 @@ class PlannerServer(Node):
         print(f"First isoline has {len(isolines[0])} points.")
         print(f"First normal has {len(normals[0])} vectors.")
 
+        geodesic_paths = []
         # convert isolines and normals into pose arrays
         for isoline, norm in zip(isolines, normals):
             path = geometry_msgs.msg.PoseArray()
@@ -60,9 +64,15 @@ class PlannerServer(Node):
                 pose.orientation.z = float(rot[2])
                 pose.orientation.w = float(rot[3])
                 path.poses.append(pose)
-            response.geodesic_paths.append(path)
-
+            geodesic_paths.append(path)
         
+        for path in geodesic_paths:
+            self.get_logger().info(f'Downsampling geodesic path with {len(path.poses)} points.')
+            new_path = downsample(request.spacing / 10.0, 360.0, path)
+
+            self.get_logger().info(f'downsampled geodesic path with {len(new_path.poses)} points.')
+            response.geodesic_paths.append(new_path)
+
         # publish the pose array for debug
         self.get_logger().info('Publishing computed geodesic paths.')
         publisher = self.create_publisher(geometry_msgs.msg.PoseArray, 'geodesic_paths', 10)
