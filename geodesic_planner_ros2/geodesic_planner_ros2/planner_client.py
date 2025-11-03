@@ -72,6 +72,12 @@ def main(args=None):
     source_point.z = 0.7
     sources.append(source_point)
 
+    source_point_2 = Point()
+    source_point_2.x = 0.3
+    source_point_2.y = 0.2
+    source_point_2.z = 0.5
+    sources.append(source_point_2)
+
     # Send request
     future = client.send_request(mesh_file_path, sources, spacing)
     

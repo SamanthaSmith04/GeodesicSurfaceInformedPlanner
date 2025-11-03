@@ -13,12 +13,28 @@ class PlannerServer(Node):
         super().__init__('planner_server')
         self.srv = self.create_service(ComputeGeodesics, 'compute_geodesics', self.compute_geodesics_callback)
         self.get_logger().info('Planner server ready.')
+        self.sources_publisher = self.create_publisher(geometry_msgs.msg.PointStamped, 'geodesic_sources', 10)
 
     def compute_geodesics_callback(self, request, response):
         planner = GeodesicPlanner(request.mesh_file_path)
-        source_point = request.sources[0]
-        planner.source_vertex = np.array([source_point.x, source_point.y, source_point.z])
-        isolines, normals = planner.find_geodesic_paths(request.spacing)
+
+        source_indices = planner.find_nearest_sources(request.sources)
+
+        for source in source_indices:
+            self.get_logger().info(f'Received source point: [{source[0]}, {source[1]}, {source[2]}]')
+            # publish the source point for debug
+            source_msg = geometry_msgs.msg.PointStamped()
+            source_msg.header.stamp = self.get_clock().now().to_msg()
+            source_msg.header.frame_id = "world"
+            source_msg.point.x = float(source[0])
+            source_msg.point.y = float(source[1])
+            source_msg.point.z = float(source[2])
+            self.sources_publisher.publish(source_msg)
+            self.get_logger().info(f'Published source point: [{source[0]}, {source[1]}, {source[2]}]')
+
+        # source_point = request.sources[0]
+        # planner.source_vertex = np.array([source_point.x, source_point.y, source_point.z])
+        isolines, normals = planner.find_geodesic_paths(request.spacing, request.sources)
 
         print(f"Computed {len(isolines)} isolines.")
         print(f"First isoline has {len(isolines[0])} points.")

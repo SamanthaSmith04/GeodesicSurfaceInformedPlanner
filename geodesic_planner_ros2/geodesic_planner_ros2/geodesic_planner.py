@@ -26,29 +26,43 @@ class GeodesicPlanner:
         self.solver = pp3d.MeshHeatMethodDistanceSolver(self.mesh.vertices, self.mesh.faces)
 
 
-    def compute_geodesic_distances(self, source_vertex_index=None) -> np.ndarray:
+    def compute_geodesic_distances(self, source_vertex_indices=None) -> np.ndarray:
         '''
         Compute geodesic distances from the source vertex to all other vertices in the mesh.
         Parameters:
-            source_vertex_index: Optional index of the source vertex in the mesh. If None, uses the closest vertex to self.source_vertex.
+            source_vertex_indices: Optional index of the source vertices in the mesh. If None, uses the closest vertex to self.source_vertex.
         Returns:
             distances: A numpy array of geodesic distances from the source vertex to all other vertices in the mesh.
         '''
         # find the closest vertex in the mesh to the source vertex
-        source_index = self.mesh.kdtree.query(self.source_vertex)[1]
-        print("Actual source vertex point:", self.source_vertex)
-        print("Source vertex index:", source_index)
-        print("Closest vertex coordinates:", self.mesh.vertices[source_index])
-        print("Distance between source point and closest vertex:", np.linalg.norm(self.mesh.vertices[source_index] - self.source_vertex))
+        # source_index = self.mesh.kdtree.query(self.source_vertex)[1]
+        # print("Actual source vertex point:", self.source_vertex)
+        # print("Source vertex index:", source_index)
+        # print("Closest vertex coordinates:", self.mesh.vertices[source_index])
+        # print("Distance between source point and closest vertex:", np.linalg.norm(self.mesh.vertices[source_index] - self.source_vertex))
 
-        # Check if source index is valid
-        if source_index >= len(self.mesh.vertices) or source_index < 0:
-            print(f"ERROR: Invalid source index {source_index}")
-            return None
+        source_indices = []
+        for idx in source_vertex_indices:
+            point = np.array([idx.x, idx.y, idx.z])
+            print(f"Processing source vertex index: {idx}")
+            source_index = self.mesh.kdtree.query(point)[1]
+            source_indices.append(source_index)
+            print(f"Source vertex index {idx} coordinates:", self.mesh.vertices[source_index])
+            print(f"Distance between source point and vertex {idx}:", np.linalg.norm(self.mesh.vertices[source_index] - self.source_vertex))
+
+            # Check if source index is valid
+            if source_index >= len(self.mesh.vertices) or source_index < 0:
+                print(f"ERROR: Invalid source index {source_index}")
+                return None
             
         # compute geodesic distances from the source vertex to all other vertices
+        distances = []
         try:
-            distances = self.solver.compute_distance(source_index)
+            if len(source_indices) == 1:
+                source_index = source_indices[0]
+                distances = self.solver.compute_distance(source_index)
+            else:
+                distances = self.solver.compute_distance_multisource(source_indices)
         except Exception as e:
             print(f"ERROR in geodesic computation: {e}")
             return None
@@ -60,6 +74,21 @@ class GeodesicPlanner:
         print(f"Number of unique distances: {len(np.unique(distances))}")
         
         return distances
+    
+    def find_nearest_sources(self, points: list) -> list:
+        """
+        Find the nearest vertices in the mesh for the given list of points.
+        Parameters:
+            points: A list of Point objects representing source points.
+        Returns:
+            source_points: A list of nearest vertex coordinates in the mesh.
+        """
+        source_points = []
+        for idx in points:
+            point = np.array([idx.x, idx.y, idx.z])
+            source_index = self.mesh.kdtree.query(point)[1]
+            source_points.append(self.mesh.vertices[source_index])
+        return source_points
     
 
     def find_single_isoline(self, target_distance : float, distances : np.ndarray) -> (list, list):
@@ -128,17 +157,17 @@ class GeodesicPlanner:
     
         return isolines, isoline_normals
 
-    def find_geodesic_paths(self, target_distance: float, source_vertex_index=None) -> (list, list):
+    def find_geodesic_paths(self, target_distance: float, source_vertex_indices=None) -> (list, list):
         '''
         Compute geodesic paths (isolines) at specified intervals from the source vertex.
         Parameters:
             target_distance: The distance at which to compute the isolines.
-            source_vertex_index: Optional index of the source vertex in the mesh. If None, uses the closest vertex to self.source_vertex.
+            source_vertex_indices: Optional index of the source vertex in the mesh. If None, uses the closest vertex to self.source_vertex.
         Returns:
             isolines: A list of lists, where each inner list contains the vertices of an isoline at the specified distance.
             isoline_normals: A list of lists, where each inner list contains the normal vectors of the faces corresponding to the isoline vertices.
         '''
-        distances = self.compute_geodesic_distances(source_vertex_index)
+        distances = self.compute_geodesic_distances(source_vertex_indices)
         if distances is None:
             print("ERROR: Distances are None, cannot compute geodesic paths.")
             return None, None
