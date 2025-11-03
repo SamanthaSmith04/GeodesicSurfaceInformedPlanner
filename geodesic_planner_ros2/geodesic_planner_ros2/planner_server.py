@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 
 import geometry_msgs
-import visualization_msgs
-from visualization_msgs.msg import Marker
 import rclpy
 from rclpy.node import Node
 from geodesic_planner_msgs.srv import ComputeGeodesics
 from geodesic_planner_ros2.geodesic_planner import GeodesicPlanner
 import numpy as np
-import geodesic_planner_ros2.utils as utils 
-
+import geodesic_planner_ros2.utils as utils
+import visualization_msgs
+from visualization_msgs.msg import Marker 
 class PlannerServer(Node):
     def __init__(self):
         super().__init__('planner_server')
@@ -17,32 +16,17 @@ class PlannerServer(Node):
         self.get_logger().info('Planner server ready.')
         self.sources_publisher = self.create_publisher(geometry_msgs.msg.PointStamped, 'geodesic_sources', 10)
         self.mesh_publisher = self.create_publisher(visualization_msgs.msg.Marker, 'mesh', 10)
+        self.timer = self.create_timer(5.0, self.publish_mesh_marker)
+
+        self.mesh_file_path = self.declare_parameter('mesh_path', '').get_parameter_value().string_value
 
     def compute_geodesics_callback(self, request, response):
         planner = GeodesicPlanner(request.mesh_file_path)
-        mesh = visualization_msgs.msg.Marker()
-        mesh.header.frame_id = "world"
-        mesh.header.stamp = self.get_clock().now().to_msg()
-        mesh.ns = "mesh"
-        mesh.id = 0
-        mesh.type = visualization_msgs.msg.Marker.MESH_RESOURCE
-        mesh.action = visualization_msgs.msg.Marker.ADD
-        mesh.mesh_resource = f"file://{request.mesh_file_path}"
-        mesh.pose.orientation.w = 1.0
-        mesh.scale.x = 1.0
-        mesh.scale.y = 1.0
-        mesh.scale.z = 1.0 
-        mesh.color.a = 1.0
-        mesh.color.r = 0.5
-        mesh.color.g = 0.5
-        mesh.color.b = 0.5
-        self.mesh_publisher.publish(mesh)
-        self.get_logger().info('Published mesh for visualization.')
 
         source_indices = planner.find_nearest_sources(request.sources)
 
         for source in source_indices:
-            self.get_logger().info(f'Received source point: [{source[0]}, {source[1]}, {source[2]}]')
+            # self.get_logger().info(f'Received source point: [{source[0]}, {source[1]}, {source[2]}]')
             # publish the source point for debug
             source_msg = geometry_msgs.msg.PointStamped()
             source_msg.header.stamp = self.get_clock().now().to_msg()
@@ -51,7 +35,7 @@ class PlannerServer(Node):
             source_msg.point.y = float(source[1])
             source_msg.point.z = float(source[2])
             self.sources_publisher.publish(source_msg)
-            self.get_logger().info(f'Published source point: [{source[0]}, {source[1]}, {source[2]}]')
+            # self.get_logger().info(f'Published source point: [{source[0]}, {source[1]}, {source[2]}]')
 
         # source_point = request.sources[0]
         # planner.source_vertex = np.array([source_point.x, source_point.y, source_point.z])
@@ -93,7 +77,27 @@ class PlannerServer(Node):
         response.message = "Geodesic paths computed successfully."
 
         return response
-
+    
+    def publish_mesh_marker(self):
+        """Publish the mesh as a visualization marker."""
+        marker = visualization_msgs.msg.Marker()
+        marker.header.frame_id = "world"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "mesh"
+        marker.id = 0
+        marker.type = visualization_msgs.msg.Marker.MESH_RESOURCE
+        marker.action = visualization_msgs.msg.Marker.ADD
+        marker.mesh_resource = "file://" + self.mesh_file_path
+        marker.scale.x = 1.0
+        marker.scale.y = 1.0
+        marker.scale.z = 1.0
+        marker.color.a = 0.5  # Semi-transparent
+        marker.color.r = 140.0/255.0
+        marker.color.g = 194.0/255.0
+        marker.color.b = 191.0/255.0
+        self.mesh_publisher.publish(marker)
+    
+        
 def main(args=None):
     rclpy.init(args=args)
     node = PlannerServer()

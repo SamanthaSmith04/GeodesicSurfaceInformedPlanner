@@ -44,11 +44,11 @@ class GeodesicPlanner:
         source_indices = []
         for idx in source_vertex_indices:
             point = np.array([idx.x, idx.y, idx.z])
-            print(f"Processing source vertex index: {idx}")
+            # print(f"Processing source vertex index: {idx}")
             source_index = self.mesh.kdtree.query(point)[1]
             source_indices.append(source_index)
-            print(f"Source vertex index {idx} coordinates:", self.mesh.vertices[source_index])
-            print(f"Distance between source point and vertex {idx}:", np.linalg.norm(self.mesh.vertices[source_index] - self.source_vertex))
+            # print(f"Source vertex index {idx} coordinates:", self.mesh.vertices[source_index])
+            # print(f"Distance between source point and vertex {idx}:", np.linalg.norm(self.mesh.vertices[source_index] - self.source_vertex))
 
             # Check if source index is valid
             if source_index >= len(self.mesh.vertices) or source_index < 0:
@@ -68,10 +68,10 @@ class GeodesicPlanner:
             return None
         
         # Debug: Print some statistics about the distances
-        print(f"Min distance: {np.min(distances)}")
-        print(f"Max distance: {np.max(distances)}")
-        print(f"Mean distance: {np.mean(distances)}")
-        print(f"Number of unique distances: {len(np.unique(distances))}")
+        # print(f"Min distance: {np.min(distances)}")
+        # print(f"Max distance: {np.max(distances)}")
+        # print(f"Mean distance: {np.mean(distances)}")
+        # print(f"Number of unique distances: {len(np.unique(distances))}")
         
         return distances
     
@@ -157,7 +157,7 @@ class GeodesicPlanner:
     
         return isolines, isoline_normals
 
-    def find_geodesic_paths(self, target_distance: float, source_vertex_indices=None) -> (list, list):
+    def find_geodesic_paths(self, target_distance: float, source_vertices=None) -> (list, list):
         '''
         Compute geodesic paths (isolines) at specified intervals from the source vertex.
         Parameters:
@@ -167,11 +167,27 @@ class GeodesicPlanner:
             isolines: A list of lists, where each inner list contains the vertices of an isoline at the specified distance.
             isoline_normals: A list of lists, where each inner list contains the normal vectors of the faces corresponding to the isoline vertices.
         '''
-        distances = self.compute_geodesic_distances(source_vertex_indices)
+        distances = self.compute_geodesic_distances(source_vertices)
         if distances is None:
             print("ERROR: Distances are None, cannot compute geodesic paths.")
             return None, None
         isolines, isoline_normals = self.compute_isolines(target_distance, distances)
+
+        ## add an isoline along the sources
+        if source_vertices is not None:
+            source_isoline = []
+            source_normals = []
+            for point in source_vertices:
+                point = np.array([point.x, point.y, point.z])
+                source_index = self.mesh.kdtree.query(point)[1]
+                # if the actual point is too far from the surface, use the kdtree point
+                dist_to_surface = np.linalg.norm(self.mesh.vertices[source_index] - point)
+                if dist_to_surface > 0.05:
+                    point = self.mesh.vertices[source_index]
+                source_isoline.append(point)
+                source_normals.append(self.mesh.vertex_normals[source_index])
+            isolines.insert(0, source_isoline)
+            isoline_normals.insert(0, source_normals)
         return isolines, isoline_normals
 
 
