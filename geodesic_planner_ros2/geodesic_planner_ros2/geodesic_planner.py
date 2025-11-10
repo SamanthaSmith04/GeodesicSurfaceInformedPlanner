@@ -182,7 +182,7 @@ class GeodesicPlanner:
                 source_index = self.mesh.kdtree.query(point)[1]
                 # if the actual point is too far from the surface, use the kdtree point
                 dist_to_surface = np.linalg.norm(self.mesh.vertices[source_index] - point)
-                if dist_to_surface > 0.1:
+                if dist_to_surface > 0.05:
                     point = self.mesh.vertices[source_index]
                 source_isoline.append(point)
                 source_normals.append(self.mesh.vertex_normals[source_index])

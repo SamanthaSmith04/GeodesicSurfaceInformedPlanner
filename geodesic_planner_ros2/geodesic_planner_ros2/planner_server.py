@@ -10,7 +10,7 @@ import geodesic_planner_ros2.utils as utils
 import visualization_msgs
 from visualization_msgs.msg import Marker 
 
-from geodesic_planner_ros2.downsample import downsample
+from geodesic_planner_ros2.line_fitting import fit_parametric_curve, split_isoline_gaps, interpolate_path, get_normals
 
 class PlannerServer(Node):
     def __init__(self):
@@ -29,7 +29,6 @@ class PlannerServer(Node):
         source_indices = planner.find_nearest_sources(request.sources)
 
         for source in source_indices:
-            # self.get_logger().info(f'Received source point: [{source[0]}, {source[1]}, {source[2]}]')
             # publish the source point for debug
             source_msg = geometry_msgs.msg.PointStamped()
             source_msg.header.stamp = self.get_clock().now().to_msg()
@@ -38,40 +37,63 @@ class PlannerServer(Node):
             source_msg.point.y = float(source[1])
             source_msg.point.z = float(source[2])
             self.sources_publisher.publish(source_msg)
-            # self.get_logger().info(f'Published source point: [{source[0]}, {source[1]}, {source[2]}]')
 
-        # source_point = request.sources[0]
-        # planner.source_vertex = np.array([source_point.x, source_point.y, source_point.z])
-        isolines, normals = planner.find_geodesic_paths(request.spacing, request.sources)
+        # get initial geodesic isolines
+        isolines, _ = planner.find_geodesic_paths(request.spacing, request.sources)
 
-        print(f"Computed {len(isolines)} isolines.")
-        print(f"First isoline has {len(isolines[0])} points.")
-        print(f"First normal has {len(normals[0])} vectors.")
+        # split isolines at large gaps
+        isoline_segments = []
+        for isoline in isolines:
+            segments = split_isoline_gaps(isoline, max_gap=0.2)
+            print(f"Split isoline into {len(segments)} segments.")
+            for segment in segments:
+                seg = []
+                for point in segment:
+                    
+                    seg.append(point)
+                isoline_segments.append(seg)
 
+        # fit parametric curves to each isoline segment and interpolate points
+        interpolated_paths = []
+        interpolated_normals = []
+        for isoline in isoline_segments:
+            if len(isoline) < 3:
+                interpolated_paths.append(isoline)
+                interpolated_normals.append(get_normals(isoline, planner.mesh))
+                
+                continue
+            print(f"Fitting line to isoline with {len(isoline_segments)} points.")
+            x,y,z = fit_parametric_curve(isoline, smoothing=0.0)
+
+            points_i, norms_i = interpolate_path(x, y, z, 0.05, planner.mesh)
+            interpolated_paths.append(points_i)
+            interpolated_normals.append(norms_i)
+
+        # convert interpolated paths to PoseArray messages
         geodesic_paths = []
         # convert isolines and normals into pose arrays
-        for isoline, norm in zip(isolines, normals):
-            path = geometry_msgs.msg.PoseArray()
-            for vertex, normal in zip(isoline, norm):
+        print(f"len paths: {len(interpolated_paths)}, len normals: {len(interpolated_normals)}")
+        for path_points, path_normals in zip(interpolated_paths, interpolated_normals):
+            print(f"Path has {len(path_points)} points and {len(path_normals)} normals.")
+            path_msg = geometry_msgs.msg.PoseArray()
+            path_msg.header.frame_id = "world"
+            path_msg.header.stamp = self.get_clock().now().to_msg()
+            for i, point in enumerate(path_points):
                 pose = geometry_msgs.msg.Pose()
-                pose.position.x = float(vertex[0])
-                pose.position.y = float(vertex[1])
-                pose.position.z = float(vertex[2])
-                
-                rot = utils.z_align_normal(normal[0], normal[1], normal[2])
-                pose.orientation.x = float(rot[0])
-                pose.orientation.y = float(rot[1])
-                pose.orientation.z = float(rot[2])
-                pose.orientation.w = float(rot[3])
-                path.poses.append(pose)
-            geodesic_paths.append(path)
+                pose.position.x = float(point[0])
+                pose.position.y = float(point[1])
+                pose.position.z = float(point[2])
+                # get the corresponding normal
+                normal = path_normals[i]
+                quat = utils.z_align_normal(normal[0], normal[1], normal[2])
+                pose.orientation.x = quat[0]
+                pose.orientation.y = quat[1]
+                pose.orientation.z = quat[2]
+                pose.orientation.w = quat[3]
+                path_msg.poses.append(pose)
+            geodesic_paths.append(path_msg)
         
-        for path in geodesic_paths:
-            self.get_logger().info(f'Downsampling geodesic path with {len(path.poses)} points.')
-            new_path = downsample(request.spacing / 10.0, 360.0, path)
-
-            self.get_logger().info(f'downsampled geodesic path with {len(new_path.poses)} points.')
-            response.geodesic_paths.append(new_path)
+        response.geodesic_paths = geodesic_paths
 
         # publish the pose array for debug
         self.get_logger().info('Publishing computed geodesic paths.')
