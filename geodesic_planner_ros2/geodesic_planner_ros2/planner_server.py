@@ -19,9 +19,17 @@ class PlannerServer(Node):
         self.get_logger().info('Planner server ready.')
         self.sources_publisher = self.create_publisher(geometry_msgs.msg.PointStamped, 'geodesic_sources', 10)
         self.mesh_publisher = self.create_publisher(visualization_msgs.msg.Marker, 'mesh', 10)
-        self.timer = self.create_timer(5.0, self.publish_mesh_marker)
+        self.timer = self.create_timer(0.5, self.publish_mesh_marker)
 
         self.mesh_file_path = self.declare_parameter('mesh_path', '').get_parameter_value().string_value
+
+        self.path_marker_pub = self.create_publisher(visualization_msgs.msg.MarkerArray, 'individual_paths', 10)
+        self.publisher = self.create_publisher(geometry_msgs.msg.PoseArray, 'geodesic_paths', 10)
+
+        self.all_markers = visualization_msgs.msg.MarkerArray()
+
+        self.all_paths = geometry_msgs.msg.PoseArray()
+        self.all_paths.header.frame_id = "world"
 
     def compute_geodesics_callback(self, request, response):
         planner = GeodesicPlanner(request.mesh_file_path)
@@ -97,13 +105,45 @@ class PlannerServer(Node):
 
         # publish the pose array for debug
         self.get_logger().info('Publishing computed geodesic paths.')
-        publisher = self.create_publisher(geometry_msgs.msg.PoseArray, 'geodesic_paths', 10)
-        all_paths = geometry_msgs.msg.PoseArray()
-        all_paths.header.frame_id = "world"
-        all_paths.header.stamp = self.get_clock().now().to_msg()
+
+        self.all_paths = geometry_msgs.msg.PoseArray()
+        self.all_paths.header.frame_id = "world"
+        self.all_paths.header.stamp = self.get_clock().now().to_msg()
+
+        self.all_markers = visualization_msgs.msg.MarkerArray()
+        self.all_markers.markers = []
+
+        path_index = 0
         for path in response.geodesic_paths:
-            all_paths.poses.extend(path.poses)
-        publisher.publish(all_paths)
+            self.all_paths.poses.extend(path.poses)
+            
+            # create a line strip marker for this path (color gradient based on index, base color based on current path index)
+            for i in range(len(path.poses)-1):
+                marker = visualization_msgs.msg.Marker()
+                marker.header.frame_id = "world"
+                marker.header.stamp = self.get_clock().now().to_msg()
+                marker.ns = "geodesic_path"
+                marker.id = path_index * 1000 + i
+                marker.type = visualization_msgs.msg.Marker.LINE_STRIP
+                marker.action = visualization_msgs.msg.Marker.ADD
+                marker.scale.x = 0.02  # Line width
+                marker.scale.y = 0.02
+                marker.scale.z = 0.02
+                marker.color.a = 1.0
+                marker.color.r = float((path_index % 3) == 0) * (1.0 - float(i) / len(path.poses))
+                marker.color.g = float((path_index % 3) == 1) * (1.0 - float(i) / len(path.poses))
+                marker.color.b = float((path_index % 3) == 2) * (1.0 - float(i) / len(path.poses))
+
+                start_point = path.poses[i].position
+                end_point = path.poses[i+1].position
+
+                marker.points.append(start_point)
+                marker.points.append(end_point)
+
+                self.all_markers.markers.append(marker)
+            path_index += 1
+        self.publisher.publish(self.all_paths)
+        self.path_marker_pub.publish(self.all_markers)
 
         response.success = True
         response.message = "Geodesic paths computed successfully."
@@ -128,6 +168,9 @@ class PlannerServer(Node):
         marker.color.g = 194.0/255.0
         marker.color.b = 191.0/255.0
         self.mesh_publisher.publish(marker)
+
+        self.path_marker_pub.publish(self.all_markers)
+        self.publisher.publish(self.all_paths)
     
         
 def main(args=None):

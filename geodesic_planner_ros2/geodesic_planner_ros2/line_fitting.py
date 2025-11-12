@@ -62,14 +62,30 @@ def order_points_nearest_neighbor(points):
     """
     if len(points) == 0 or len(points) == 1:
         return points
+    
 
-    ordered_points = [points[0]]
+    ordered_points = []
 
     points_set = []
     for p in points:
         points_set.append(tuple(p))
 
-    current_point = points_set[0]
+    # find point with the fewest neighbors as starting point
+    start_idx = 0
+    min_neighbors = float('inf')
+    for i, point in enumerate(points_set):
+        count = 0
+        for other_point in points_set:
+            if point != other_point:
+                dist = np.linalg.norm(np.array(point) - np.array(other_point))
+                if dist < 0.1:
+                    count += 1
+        if count < min_neighbors:
+            min_neighbors = count
+            start_idx = i
+
+    ordered_points.append(list(points_set[start_idx]))
+    current_point = points_set[start_idx]
     while points_set:
         nearest_point = min(points_set, key=lambda p: np.linalg.norm(np.array(current_point) - np.array(p)))
         ordered_points.append(list(nearest_point))
