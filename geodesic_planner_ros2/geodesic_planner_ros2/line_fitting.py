@@ -69,20 +69,17 @@ def order_points_nearest_neighbor(points):
     points_set = []
     for p in points:
         points_set.append(tuple(p))
+    print(f"Ordering {len(points_set)} points using nearest neighbor.")
 
     # find point with the fewest neighbors as starting point
-    start_idx = 0
+    tree = cKDTree(points_set)
     min_neighbors = float('inf')
+    start_idx = 0
     for i, point in enumerate(points_set):
-        count = 0
-        for other_point in points_set:
-            if point != other_point:
-                dist = np.linalg.norm(np.array(point) - np.array(other_point))
-                if dist < 0.1:
-                    count += 1
-        if count < min_neighbors:
-            min_neighbors = count
-            start_idx = i
+        neighbors = tree.query_ball_point(point, r=0.1)
+        if len(neighbors) < min_neighbors:
+            min_neighbors = len(neighbors)
+            start_idx = i  
 
     ordered_points.append(list(points_set[start_idx]))
     current_point = points_set[start_idx]
@@ -140,31 +137,34 @@ def interpolate_path(x_interp, y_interp, z_interp, point_spacing, mesh):
         interpolated_normals (list of np.array): List of normals at the interpolated points.
     """
 
-    t_values = np.linspace(0, 1, 10000)
-    x_vals = x_interp(t_values)
-    y_vals = y_interp(t_values)
-    z_vals = z_interp(t_values)
+    # densely sample the curve to compute arc length
+    t_dense = np.linspace(0, 1, 100000)
+    x_dense = x_interp(t_dense)
+    y_dense = y_interp(t_dense)
+    z_dense = z_interp(t_dense)
+    dense_points = np.vstack((x_dense, y_dense, z_dense)).T
 
-    interpolated_points = []
-    interpolated_normals = []
+    segment_lengths = np.linalg.norm(np.diff(dense_points, axis=0), axis=1)
+    arc_lengths = np.cumsum(np.insert(segment_lengths, 0, 0))
+    total_length = arc_lengths[-1]
+    num_points = int(total_length / point_spacing) + 1
+    target_arc_lengths = np.linspace(0, total_length, num_points)
 
-    current_point = np.array([x_vals[0], y_vals[0], z_vals[0]])
-    x_vals = x_vals[1:]
-    y_vals = y_vals[1:]
-    z_vals = z_vals[1:]
-    current_dist = 0.0
-    interpolated_points.append(current_point)
-    
-    last_step = np.array([x_vals[0], y_vals[0], z_vals[0]])
-    for i in range(1,len(x_vals)):
-        step_point = np.array([x_vals[i], y_vals[i], z_vals[i]])
-        diff = np.linalg.norm(step_point - last_step)
-        current_dist += diff
-        if current_dist >= point_spacing:
-            interpolated_points.append(step_point)
-            current_dist = 0.0
-        last_step = step_point
-        
+    # get uniformly spaced t values based on arc length
+    t_uniform = np.interp(target_arc_lengths, arc_lengths, t_dense) 
+
+    x_vals = x_interp(t_uniform)
+    y_vals = y_interp(t_uniform)
+    z_vals = z_interp(t_uniform)
+    interpolated_points = [np.array([x, y, z]) for x, y, z in zip(x_vals, y_vals, z_vals)]
+
+    # prune any points in the path that are too close to eachother (regardless of ordering)
+    pruned_points = [interpolated_points[0]]
+    for point in interpolated_points[1:]:
+        if np.linalg.norm(point - pruned_points[-1]) >= point_spacing * 0.5:
+            pruned_points.append(point)
+    interpolated_points = pruned_points
+
     interpolated_normals = get_normals(interpolated_points, mesh)
 
     return interpolated_points, interpolated_normals
