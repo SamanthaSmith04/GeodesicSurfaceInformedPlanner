@@ -1,10 +1,13 @@
 import numpy as np
 from sklearn.decomposition import PCA
-from scipy.interpolate import UnivariateSpline
+from sklearn.neighbors import kneighbors_graph, NearestNeighbors
+from scipy.sparse.csgraph import minimum_spanning_tree
+from scipy.interpolate import UnivariateSpline, Rbf
 from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import trimesh
+import networkx as nx
 
 def fit_parametric_curve(points, smoothing=0.0):
     """
@@ -15,6 +18,7 @@ def fit_parametric_curve(points, smoothing=0.0):
     Returns:
         spline_x, spline_y, spline_z: Spline functions for x, y, z coordinates.
     """
+    points = order_points_nearest_neighbor(points)
     points = np.array(points)
     t = np.linspace(0, 1, len(points))
 
@@ -35,12 +39,13 @@ def fit_parametric_curve(points, smoothing=0.0):
     # fig = plt.figure()
     # ax = fig.add_subplot(111, projection='3d')
     # ax.scatter(points[:, 0], points[:, 1], points[:, 2], label='Data Points')
+    # ax.scatter(points[0, 0], points[0, 1], points[0, 2], color='g', s=100, label='Start Point')
     # t_fit = np.linspace(0, 1, 100)
     # ax.plot(spline_x(t_fit), spline_y(t_fit), spline_z(t_fit), color='r', label='Fitted Curve')
 
-    # ax.set_xlim(0.0, 1.5)
-    # ax.set_ylim(0.0, 1.5)
-    # ax.set_zlim(0.0, 1.5)
+    # # ax.set_xlim(0.0, 1.5)
+    # # ax.set_ylim(0.0, 1.5)
+    # # ax.set_zlim(0.0, 1.5)
   
     # ax.set_xlabel('X')
     # ax.set_ylabel('Y')
@@ -63,33 +68,37 @@ def order_points_nearest_neighbor(points):
     if len(points) == 0 or len(points) == 1:
         return points
     
+    points = np.array(points)
+    
+    # build MST
+    G = nx.Graph()
+    for i in range(len(points)):
+        for j in range(i + 1, len(points)):
+            dist = np.linalg.norm(points[i] - points[j])
+            G.add_edge(i, j, weight=dist)
+    mst = nx.minimum_spanning_tree(G)
 
-    ordered_points = []
+    # find longest path in MST
+    leaves = [node for node in mst.nodes() if mst.degree(node) == 1]
+    print(f"leaves len: {len(leaves)}")
+    # Pick the leaf farthest from centroid
+    centroid = points.mean(axis=0)
+    leaf_coords = points[leaves]
+    dists_to_centroid = np.linalg.norm(leaf_coords - centroid, axis=1)
+    start_leaf = leaves[np.argmax(dists_to_centroid)]
+    
 
-    points_set = []
-    for p in points:
-        points_set.append(tuple(p))
-    print(f"Ordering {len(points_set)} points using nearest neighbor.")
-
-    # find point with the fewest neighbors as starting point
-    tree = cKDTree(points_set)
-    min_neighbors = float('inf')
-    start_idx = 0
-    for i, point in enumerate(points_set):
-        neighbors = tree.query_ball_point(point, r=0.1)
-        if len(neighbors) < min_neighbors:
-            min_neighbors = len(neighbors)
-            start_idx = i  
-
-    ordered_points.append(list(points_set[start_idx]))
-    current_point = points_set[start_idx]
-    while points_set:
-        nearest_point = min(points_set, key=lambda p: np.linalg.norm(np.array(current_point) - np.array(p)))
-        ordered_points.append(list(nearest_point))
-        points_set.remove(nearest_point)
-        current_point = nearest_point
-
-    return ordered_points
+    points = points.copy()
+    ordered = [points[start_leaf]]
+    points = np.delete(points, 0, axis=0)
+    
+    while len(points) > 0:
+        last = ordered[-1]
+        dists = np.linalg.norm(points - last, axis=1)
+        idx = np.argmin(dists)
+        ordered.append(points[idx])
+        points = np.delete(points, idx, axis=0)
+    return np.array(ordered)
 
 
 def split_isoline_gaps(isoline, max_gap=0.1):
@@ -159,11 +168,11 @@ def interpolate_path(x_interp, y_interp, z_interp, point_spacing, mesh):
     interpolated_points = [np.array([x, y, z]) for x, y, z in zip(x_vals, y_vals, z_vals)]
 
     # prune any points in the path that are too close to eachother (regardless of ordering)
-    pruned_points = [interpolated_points[0]]
-    for point in interpolated_points[1:]:
-        if np.linalg.norm(point - pruned_points[-1]) >= point_spacing * 0.5:
-            pruned_points.append(point)
-    interpolated_points = pruned_points
+    # pruned_points = [interpolated_points[0]]
+    # for point in interpolated_points[1:]:
+    #     if np.linalg.norm(point - pruned_points[-1]) >= point_spacing * 0.05:
+    #         pruned_points.append(point)
+    # interpolated_points = pruned_points
 
     interpolated_normals = get_normals(interpolated_points, mesh)
 
@@ -185,3 +194,50 @@ def get_normals(points, mesh):
         normal = mesh.face_normals[mesh.faces.tolist().index(mesh.faces[face_idx[0]].tolist())]
         normals.append(normal)
     return normals
+
+def extrapolate_endpoints(points, normals, extension_length=0.05, point_spacing=0.01):
+    """
+    Extrapolate the endpoints of a list of 3D points along the direction of the endpoints. (Normal directions will be the same as the original endpoints)
+    This will add evenly spaced points along the direction of the endpoints using the same spacing method as the original points.
+    Args:
+        points (list of np.array): List of 3D points.
+        normals (list of np.array): List of normals at the points.
+        extension_length (float): Length to extend at each endpoint.
+    Returns:
+        extended_points (list of np.array): List of 3D points with extrapolated endpoints.
+        extended_normals (list of np.array): List of normals at the extended points.
+    """ 
+    if len(points) < 2:
+        return points, normals
+    
+    # check if starting and ending segments are too close together (loop)
+    if np.linalg.norm(points[1] - points[0]) < point_spacing * 0.5 or np.linalg.norm(points[-1] - points[-2]) < point_spacing * 0.5:
+        return points, normals
+
+    # compute spacing based on first two points
+    start_dir = None
+    if len(points) < 4:
+        start_dir = points[1] - points[0]
+    else:
+        # get average direction over first 4 points
+        start_dir = (points[1] - points[0] + points[2] - points[1] + points[3] - points[2]) / 3.0
+    start_spacing = point_spacing
+    start_dir = start_dir / np.linalg.norm(start_dir)   
+    num_start_points = int(extension_length / start_spacing)
+    extended_start_points = [points[0] - start_dir * start_spacing * (i + 1) for i in range(num_start_points)][::-1]
+    extended_start_normals = [normals[0] for _ in range(num_start_points)]
+    # compute spacing based on last two points
+    end_dir = None
+    if len(points) < 4:
+        end_dir = points[-1] - points[-2]
+    else:
+        # get average direction over last 4 points
+        end_dir = (points[-1] - points[-2] + points[-2] - points[-3] + points[-3] - points[-4]) / 3.0
+    end_spacing = point_spacing
+    end_dir = end_dir / np.linalg.norm(end_dir)
+    num_end_points = int(extension_length / end_spacing)
+    extended_end_points = [points[-1] + end_dir * end_spacing * (i + 1) for i in range(num_end_points)]    
+    extended_end_normals = [normals[-1] for _ in range(num_end_points)]
+    extended_points = extended_start_points + points + extended_end_points
+    extended_normals = extended_start_normals + normals + extended_end_normals
+    return extended_points, extended_normals

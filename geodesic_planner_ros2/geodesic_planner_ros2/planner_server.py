@@ -10,7 +10,7 @@ import geodesic_planner_ros2.utils as utils
 import visualization_msgs
 from visualization_msgs.msg import Marker 
 
-from geodesic_planner_ros2.line_fitting import fit_parametric_curve, split_isoline_gaps, interpolate_path, get_normals
+from geodesic_planner_ros2.line_fitting import fit_parametric_curve, split_isoline_gaps, interpolate_path, get_normals, extrapolate_endpoints
 
 class PlannerServer(Node):
     def __init__(self):
@@ -23,10 +23,17 @@ class PlannerServer(Node):
 
         self.mesh_file_path = self.declare_parameter('mesh_path', '').get_parameter_value().string_value
 
+        self.max_gap = self.declare_parameter('max_segment_gap', 0.15).get_parameter_value().double_value
+
         self.path_marker_pub = self.create_publisher(visualization_msgs.msg.MarkerArray, 'individual_paths', 10)
         self.publisher = self.create_publisher(geometry_msgs.msg.PoseArray, 'geodesic_paths', 10)
 
         self.all_markers = visualization_msgs.msg.MarkerArray()
+
+        self.initial_paths = geometry_msgs.msg.PoseArray()
+        self.initial_paths.header.frame_id = "world"
+
+        self.initial_paths_publisher = self.create_publisher(geometry_msgs.msg.PoseArray, 'initial_geodesic_paths', 10)
 
         self.all_paths = geometry_msgs.msg.PoseArray()
         self.all_paths.header.frame_id = "world"
@@ -49,10 +56,32 @@ class PlannerServer(Node):
         # get initial geodesic isolines
         isolines, _ = planner.find_geodesic_paths(request.spacing, request.sources)
 
+        self.initial_paths.poses = []
+        for isoline in isolines:
+            path_msg = geometry_msgs.msg.PoseArray()
+            path_msg.header.frame_id = "world"
+            path_msg.header.stamp = self.get_clock().now().to_msg()
+            for point in isoline:
+                pose = geometry_msgs.msg.Pose()
+                pose.position.x = float(point[0])
+                pose.position.y = float(point[1])
+                pose.position.z = float(point[2])
+                pose.orientation.x = 0.0
+                pose.orientation.y = 0.0
+                pose.orientation.z = 0.0
+                pose.orientation.w = 1.0
+                path_msg.poses.append(pose)
+            self.initial_paths.poses.extend(path_msg.poses)
+
         # split isolines at large gaps
         isoline_segments = []
+        isoline_index = 0
         for isoline in isolines:
-            segments = split_isoline_gaps(isoline, max_gap=0.2)
+            if isoline_index == 0: # skip the first isoline, keep whole source path
+                isoline_segments.append(isoline)
+                isoline_index += 1
+                continue
+            segments = split_isoline_gaps(isoline, max_gap=0.15)
             print(f"Split isoline into {len(segments)} segments.")
             for segment in segments:
                 seg = []
@@ -60,22 +89,32 @@ class PlannerServer(Node):
                     
                     seg.append(point)
                 isoline_segments.append(seg)
+            isoline_index += 1
 
         # fit parametric curves to each isoline segment and interpolate points
         interpolated_paths = []
         interpolated_normals = []
+
+        point_spacing = 0.01
+        idx = 0
         for isoline in isoline_segments:
             if len(isoline) < 3:
                 interpolated_paths.append(isoline)
                 interpolated_normals.append(get_normals(isoline, planner.mesh))
-                
+                idx += 1
                 continue
-            print(f"Fitting line to isoline with {len(isoline_segments)} points.")
-            x,y,z = fit_parametric_curve(isoline, smoothing=0.0)
+            print(f"Fitting line to isoline with {len(isoline)} points.")
+            x,y,z = fit_parametric_curve(isoline, smoothing=0.005)
 
-            points_i, norms_i = interpolate_path(x, y, z, 0.05, planner.mesh)
+            points_i, norms_i = interpolate_path(x, y, z, point_spacing, planner.mesh)
+
+            print(f"Interpolated {len(points_i)} points with normals.")
+            
+            # if idx > 0:
+            #     points_i, norms_i = extrapolate_endpoints(points_i, norms_i, extension_length=0.01, point_spacing=point_spacing)
             interpolated_paths.append(points_i)
             interpolated_normals.append(norms_i)
+            idx += 1
 
         # convert interpolated paths to PoseArray messages
         geodesic_paths = []
@@ -171,6 +210,7 @@ class PlannerServer(Node):
 
         self.path_marker_pub.publish(self.all_markers)
         self.publisher.publish(self.all_paths)
+        self.initial_paths_publisher.publish(self.initial_paths)
     
         
 def main(args=None):
