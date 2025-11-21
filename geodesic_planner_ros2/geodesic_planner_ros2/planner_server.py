@@ -111,7 +111,7 @@ class PlannerServer(Node):
             print(f"Interpolated {len(points_i)} points with normals.")
             
             # if idx > 0:
-            #     points_i, norms_i = extrapolate_endpoints(points_i, norms_i, extension_length=0.01, point_spacing=point_spacing)
+            #     points_i, norms_i = extrapolate_endpoints(points_i, norms_i, extension_length=0.07, point_spacing=point_spacing)
             interpolated_paths.append(points_i)
             interpolated_normals.append(norms_i)
             idx += 1
