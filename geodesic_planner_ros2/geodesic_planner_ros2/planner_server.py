@@ -116,6 +116,10 @@ class PlannerServer(Node):
             interpolated_normals.append(norms_i)
             idx += 1
 
+        for norms in interpolated_normals:
+            smoothed = self.normals_smoothing(norms)
+            norms[:] = smoothed
+
         # convert interpolated paths to PoseArray messages
         geodesic_paths = []
         # convert isolines and normals into pose arrays
@@ -211,7 +215,29 @@ class PlannerServer(Node):
         self.path_marker_pub.publish(self.all_markers)
         self.publisher.publish(self.all_paths)
         self.initial_paths_publisher.publish(self.initial_paths)
-    
+        
+    def normals_smoothing(self, normals):
+        """
+        Smooth a list of normals using a simple moving average.
+        Args:
+            normals (list of np.array): List of normal vectors to be smoothed.
+        Returns:
+            list of np.array: Smoothed normal vectors.
+        """
+        smoothed_normals = []
+        window_size = 5
+        half_window = window_size // 2
+        num_normals = len(normals)
+
+        for i in range(num_normals):
+            start_idx = max(0, i - half_window)
+            end_idx = min(num_normals, i + half_window + 1)
+            window_normals = normals[start_idx:end_idx]
+            avg_normal = np.mean(window_normals, axis=0)
+            avg_normal /= np.linalg.norm(avg_normal)  # Normalize
+            smoothed_normals.append(avg_normal)
+
+        return smoothed_normals
         
 def main(args=None):
     rclpy.init(args=args)
