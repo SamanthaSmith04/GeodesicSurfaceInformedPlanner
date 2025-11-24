@@ -93,12 +93,14 @@ class GeodesicPlanner:
         return source_points
     
 
-    def find_single_isoline(self, target_distance : float, distances : np.ndarray) -> (list, list):
+    def find_single_isoline(self, target_distance : float, distances : np.ndarray, subdivide_large_faces=True, max_edge_length=0.05) -> (list, list):
         '''
         Find the vertices that lie on the isoline at the specified distance.
         Parameters:
             target_distance: The distance at which to find the isoline.
             distances: A numpy array of geodesic distances from the source vertex to all other vertices in the mesh.
+            subdivide_large_faces: If True, subdivides large triangular faces for better accuracy
+            max_edge_length: Maximum edge length before subdivision is triggered
         Returns:
             isoline_vertices: A list of vertices that lie on the isoline at the specified distance
             normal_vectors: A list of normal vectors of the faces corresponding to the isoline vertices
@@ -106,28 +108,83 @@ class GeodesicPlanner:
         if distances is None:
             print("ERROR: Distances are None, cannot compute isolines.")
             return None
-        # find the isoline vertices
+
+        def find_edge_crossing(v1_pos, v2_pos, d1, d2, target):
+            """Find crossing point on edge where distance equals target"""
+            if abs(d2 - d1) < 1e-10:
+                return None
+            if (d1 <= target <= d2) or (d2 <= target <= d1):
+                t = (target - d1) / (d2 - d1)
+                if 0 <= t <= 1:
+                    return v1_pos + t * (v2_pos - v1_pos)
+            return None
+        
         isoline_vertices = []
         normal_vectors = []
+        
         # iterate through each face of the mesh
-        for face in self.mesh.faces:
-            for i in range(3):
-                v1_index = face[i]
-                v2_index = face[(i + 1) % len(face)]
-                v1_distance = distances[v1_index]
-                v2_distance = distances[v2_index]
-
-                # check if the target distance is within the face
-                if (v1_distance <= target_distance <= v2_distance) or (v2_distance <= target_distance <= v1_distance):
-                    # interpolate the vertex position at the target distance
-                    t = (target_distance - v1_distance) / (v2_distance - v1_distance)
-                    v1_pos = self.mesh.vertices[v1_index]
-                    v2_pos = self.mesh.vertices[v2_index]
-                    interpolated_vertex = v1_pos + t * (v2_pos - v1_pos)
-                    isoline_vertices.append(interpolated_vertex)
-
-                    # compute the normal vector of the face
-                    face_normal = self.mesh.face_normals[self.mesh.faces.tolist().index(face.tolist())]
+        for face_idx, face in enumerate(self.mesh.faces):
+            # Get face vertices and distances
+            v0_idx, v1_idx, v2_idx = face
+            v0, v1, v2 = self.mesh.vertices[v0_idx], self.mesh.vertices[v1_idx], self.mesh.vertices[v2_idx]
+            d0, d1, d2 = distances[v0_idx], distances[v1_idx], distances[v2_idx]
+            
+            face_normal = self.mesh.face_normals[face_idx]
+            
+            # Check if the user wants to subdivide faces
+            if subdivide_large_faces:
+                edge_lengths = [
+                    np.linalg.norm(v1 - v0),
+                    np.linalg.norm(v2 - v1),
+                    np.linalg.norm(v0 - v2)
+                ]
+                max_length = max(edge_lengths)
+                
+                if max_length > max_edge_length:
+                    # Create 4 sub-triangles from the original using midpoints
+                    m01 = (v0 + v1) / 2
+                    m12 = (v1 + v2) / 2
+                    m20 = (v2 + v0) / 2
+                    
+                    # Estimate distances at midpoints (linear interpolation)
+                    d_m01 = (d0 + d1) / 2
+                    d_m12 = (d1 + d2) / 2
+                    d_m20 = (d2 + d0) / 2
+                    
+                    # Process 4 sub-triangles
+                    sub_triangles = [
+                        [(v0, d0), (m01, d_m01), (m20, d_m20)],
+                        [(v1, d1), (m12, d_m12), (m01, d_m01)],
+                        [(v2, d2), (m20, d_m20), (m12, d_m12)],
+                        [(m01, d_m01), (m12, d_m12), (m20, d_m20)]
+                    ]
+                    
+                    for sub_tri in sub_triangles:
+                        (sv0, sd0), (sv1, sd1), (sv2, sd2) = sub_tri
+                        # Check all three edges of sub-triangle
+                        for (sp1, spd1), (sp2, spd2) in [
+                            ((sv0, sd0), (sv1, sd1)),
+                            ((sv1, sd1), (sv2, sd2)),
+                            ((sv2, sd2), (sv0, sd0))
+                        ]:
+                            crossing = find_edge_crossing(sp1, sp2, spd1, spd2, target_distance)
+                            if crossing is not None:
+                                isoline_vertices.append(crossing)
+                                normal_vectors.append(face_normal)
+                    continue
+            
+            # Processing for faces that don't need subdivision
+            # Check each edge of the triangle
+            edges = [
+                (v0, v1, d0, d1),
+                (v1, v2, d1, d2),
+                (v2, v0, d2, d0)
+            ]
+            
+            for v1_pos, v2_pos, d1, d2 in edges:
+                crossing = find_edge_crossing(v1_pos, v2_pos, d1, d2, target_distance)
+                if crossing is not None:
+                    isoline_vertices.append(crossing)
                     normal_vectors.append(face_normal)
 
         return isoline_vertices, normal_vectors
