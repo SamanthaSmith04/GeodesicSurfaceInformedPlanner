@@ -4,6 +4,7 @@ import numpy as np
 import potpourri3d as pp3d # https://pypi.org/project/potpourri3d/
 import trimesh
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
 
 '''
   Computes geodesic isolines for the entire surface
@@ -43,7 +44,8 @@ class GeodesicPlanner:
 
         source_indices = []
         for idx in source_vertex_indices:
-            point = np.array([idx.x, idx.y, idx.z])
+            # idx is already a numpy array representing a point [x, y, z]
+            point = np.asarray(idx)
             # print(f"Processing source vertex index: {idx}")
             source_index = self.mesh.kdtree.query(point)[1]
             source_indices.append(source_index)
@@ -85,7 +87,7 @@ class GeodesicPlanner:
         """
         source_points = []
         for idx in points:
-            point = np.array([idx.x, idx.y, idx.z])
+            point = np.asarray(idx)
             source_index = self.mesh.kdtree.query(point)[1]
             source_points.append(self.mesh.vertices[source_index])
         return source_points
@@ -167,6 +169,7 @@ class GeodesicPlanner:
             isolines: A list of lists, where each inner list contains the vertices of an isoline at the specified distance.
             isoline_normals: A list of lists, where each inner list contains the normal vectors of the faces corresponding to the isoline vertices.
         '''
+        source_vertices = self.find_source_points(self.mesh)
         distances = self.compute_geodesic_distances(source_vertices)
         if distances is None:
             print("ERROR: Distances are None, cannot compute geodesic paths.")
@@ -178,7 +181,7 @@ class GeodesicPlanner:
             source_isoline = []
             source_normals = []
             for point in source_vertices:
-                point = np.array([point.x, point.y, point.z])
+                point = np.asarray(point)
                 source_index = self.mesh.kdtree.query(point)[1]
                 # if the actual point is too far from the surface, use the kdtree point
                 dist_to_surface = np.linalg.norm(self.mesh.vertices[source_index] - point)
@@ -189,6 +192,82 @@ class GeodesicPlanner:
             isolines.insert(0, source_isoline)
             isoline_normals.insert(0, source_normals)
         return isolines, isoline_normals
+    
+    def find_source_points(self, mesh) -> list:
+        '''
+            Finds a set of source points on the mesh surface that form a continuous curve along the principal axis
+        '''
+        source_points = []
+
+        # PCA to find principal axes
+        pca = PCA(n_components=3)
+        pca.fit(mesh.vertices)
+        principal_axis = pca.components_[1]  # 
+        
+        # Project vertices onto principal axis
+        projections = (mesh.vertices) @ principal_axis
+        min_proj_index = np.argmin(projections)
+        max_proj_index = np.argmax(projections)
+        
+        # Trace a line between min and max projected points
+        line_spacing = 0.1  # spacing between points on the line, larger spacing gives straighter lines
+        start_point = mesh.vertices[min_proj_index]
+        end_point = mesh.vertices[max_proj_index]
+        num_points = int(np.linalg.norm(end_point - start_point) / line_spacing)
+        
+        for i in range(num_points + 1):
+            t = i / num_points
+            point_on_line = (1 - t) * start_point + t * end_point
+            # Find the closest point on the mesh to this point
+            closest_index = mesh.kdtree.query(point_on_line)[1]
+            closest_point = mesh.vertices[closest_index]
+            source_points.append(closest_point)
+
+        # find largest cluster of points
+        clusters = []
+        cluster = [source_points[0]]
+        for i in range(1, len(source_points)):
+            if np.linalg.norm(source_points[i] - source_points[i-1]) < line_spacing * 2.0:
+                cluster.append(source_points[i])
+            else:
+                clusters.append(cluster)
+                cluster = [source_points[i]]
+        clusters.append(cluster)  # add the last cluster
+
+        # select the largest cluster
+        largest_cluster = max(clusters, key=len)
+        source_points = largest_cluster
+
+        # interpolate sources to have even spacing
+        interpolated_sources = []
+        interp_spacing = 0.02
+        for i in range(len(source_points) - 1):
+            p1 = source_points[i]
+            p2 = source_points[i + 1]
+            dist = np.linalg.norm(p2 - p1)
+            num_interp_points = int(dist / interp_spacing)
+            for j in range(num_interp_points):
+                t = j / num_interp_points
+                interp_point = (1 - t) * p1 + t * p2
+                interpolated_sources.append(interp_point)
+        interpolated_sources.append(source_points[-1])  # add the last point
+        source_points = interpolated_sources
+
+        print(f"Found {len(source_points)} source points on the mesh forming a continuous curve.")
+        
+        # Plot source points on the mesh 
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(mesh.vertices[:,0], mesh.vertices[:,1], mesh.vertices[:,2], color='lightgrey', alpha=0.5, s=1)
+        source_points_np = np.array(source_points)
+        ax.scatter(source_points_np[:,0], source_points_np[:,1], source_points_np[:,2], color='red', s=20, label='Source Points')
+        ax.set_title('Source Points on Mesh (Continuous Curve)')
+        ax.legend()
+        plt.show()
+        
+        return source_points
+
+
 
 
 if __name__ == "__main__":

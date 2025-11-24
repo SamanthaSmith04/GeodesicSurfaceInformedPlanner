@@ -8,7 +8,7 @@ from geodesic_planner_ros2.geodesic_planner import GeodesicPlanner
 import numpy as np
 import geodesic_planner_ros2.utils as utils
 import visualization_msgs
-from visualization_msgs.msg import Marker 
+from visualization_msgs.msg import Marker, MarkerArray
 
 from geodesic_planner_ros2.line_fitting import fit_parametric_curve, split_isoline_gaps, interpolate_path, get_normals, extrapolate_endpoints
 
@@ -17,7 +17,7 @@ class PlannerServer(Node):
         super().__init__('planner_server')
         self.srv = self.create_service(ComputeGeodesics, 'compute_geodesics', self.compute_geodesics_callback)
         self.get_logger().info('Planner server ready.')
-        self.sources_publisher = self.create_publisher(geometry_msgs.msg.PointStamped, 'geodesic_sources', 10)
+        self.sources_publisher = self.create_publisher(visualization_msgs.msg.MarkerArray, 'geodesic_sources', 10)
         self.mesh_publisher = self.create_publisher(visualization_msgs.msg.Marker, 'mesh', 10)
         self.timer = self.create_timer(0.5, self.publish_mesh_marker)
 
@@ -38,23 +38,53 @@ class PlannerServer(Node):
         self.all_paths = geometry_msgs.msg.PoseArray()
         self.all_paths.header.frame_id = "world"
 
+        self.sources = visualization_msgs.msg.MarkerArray()
+        self.sources.markers = []
+
     def compute_geodesics_callback(self, request, response):
         planner = GeodesicPlanner(request.mesh_file_path)
 
-        source_indices = planner.find_nearest_sources(request.sources)
+        # source_indices = planner.find_nearest_sources(request.sources)
+        self.sources.markers = []
+        source_points = planner.find_source_points(planner.mesh)
+        source_msg = visualization_msgs.msg.MarkerArray()
+        i = 0
+        for source in source_points:
+            marker = visualization_msgs.msg.Marker()
+            marker.header.frame_id = "world"
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.ns = "source_points"
+            marker.id = i
+            marker.type = visualization_msgs.msg.Marker.SPHERE
+            marker.action = visualization_msgs.msg.Marker.ADD
+            marker.pose.position.x = float(source[0])
+            marker.pose.position.y = float(source[1])
+            marker.pose.position.z = float(source[2])
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.02
+            marker.scale.y = 0.02
+            marker.scale.z = 0.02
+            marker.color.r = 0.7
+            marker.color.g = 0.5
+            marker.color.b = 1.0
+            marker.color.a = 1.0
+            source_msg.markers.append(marker)
+            i += 1
 
-        for source in source_indices:
-            # publish the source point for debug
-            source_msg = geometry_msgs.msg.PointStamped()
-            source_msg.header.stamp = self.get_clock().now().to_msg()
-            source_msg.header.frame_id = "world"
-            source_msg.point.x = float(source[0])
-            source_msg.point.y = float(source[1])
-            source_msg.point.z = float(source[2])
-            self.sources_publisher.publish(source_msg)
+        self.sources = source_msg
+        print(f"Computing geodesic paths from {len(self.sources.markers)} source points.")
+
+        source_points = []
+        # for source in source_indices:
+        #     source_points.append(np.array(source))
+        
+
 
         # get initial geodesic isolines
-        isolines, _ = planner.find_geodesic_paths(request.spacing, request.sources)
+        isolines, _ = planner.find_geodesic_paths(request.spacing, source_points)
 
         self.initial_paths.poses = []
         for isoline in isolines:
@@ -81,7 +111,7 @@ class PlannerServer(Node):
                 isoline_segments.append(isoline)
                 isoline_index += 1
                 continue
-            segments = split_isoline_gaps(isoline, max_gap=0.15)
+            segments = split_isoline_gaps(isoline, max_gap=self.max_gap)
             print(f"Split isoline into {len(segments)} segments.")
             for segment in segments:
                 seg = []
@@ -104,7 +134,7 @@ class PlannerServer(Node):
                 idx += 1
                 continue
             print(f"Fitting line to isoline with {len(isoline)} points.")
-            x,y,z = fit_parametric_curve(isoline, smoothing=0.005)
+            x,y,z = fit_parametric_curve(isoline, smoothing=0.000)
 
             points_i, norms_i = interpolate_path(x, y, z, point_spacing, planner.mesh)
 
@@ -215,6 +245,7 @@ class PlannerServer(Node):
         self.path_marker_pub.publish(self.all_markers)
         self.publisher.publish(self.all_paths)
         self.initial_paths_publisher.publish(self.initial_paths)
+        self.sources_publisher.publish(self.sources)
         
     def normals_smoothing(self, normals):
         """
@@ -225,7 +256,7 @@ class PlannerServer(Node):
             list of np.array: Smoothed normal vectors.
         """
         smoothed_normals = []
-        window_size = 5
+        window_size = 10
         half_window = window_size // 2
         num_normals = len(normals)
 
