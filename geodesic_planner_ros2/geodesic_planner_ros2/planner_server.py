@@ -21,7 +21,7 @@ class PlannerServer(Node):
         self.mesh_publisher = self.create_publisher(visualization_msgs.msg.Marker, 'mesh', 10)
         self.timer = self.create_timer(0.5, self.publish_mesh_marker)
 
-        self.mesh_file_path = self.declare_parameter('mesh_path', '').get_parameter_value().string_value
+        self.mesh_file_path = ""
 
         self.max_gap = self.declare_parameter('max_segment_gap', 0.15).get_parameter_value().double_value
 
@@ -43,6 +43,8 @@ class PlannerServer(Node):
 
     def compute_geodesics_callback(self, request, response):
         planner = GeodesicPlanner(request.mesh_file_path)
+        self.mesh_file_path = request.mesh_file_path
+        self.publish_mesh_marker()
 
         # source_indices = planner.find_nearest_sources(request.sources)
         self.sources.markers = []
@@ -225,6 +227,8 @@ class PlannerServer(Node):
     
     def publish_mesh_marker(self):
         """Publish the mesh as a visualization marker."""
+        if self.mesh_file_path == "":
+            return
         marker = visualization_msgs.msg.Marker()
         marker.header.frame_id = "world"
         marker.header.stamp = self.get_clock().now().to_msg()
