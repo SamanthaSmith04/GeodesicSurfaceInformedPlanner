@@ -15,6 +15,9 @@ class RemeshingServer(Node):
   def remesh_callback(self, request, response):
     ms = pymeshlab.MeshSet()
     ms.load_new_mesh(request.mesh_file_path)
+    if request.convert_to_meters:
+        self.get_logger().info("Converting mesh units from mm to meters.")
+        ms.compute_matrix_from_scaling_or_normalization(axisx=0.001, axisy=0.001, axisz=0.001, alllayers=True)
     ms.meshing_isotropic_explicit_remeshing(targetlen=pymeshlab.PercentageValue(request.percentage_target_edge_length))
     mesh_name = request.mesh_file_path.split('/')[-1]
     save_dir = os.path.expanduser(request.save_path)

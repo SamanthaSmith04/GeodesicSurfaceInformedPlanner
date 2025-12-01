@@ -2,6 +2,7 @@
 string mesh_file_path
 string save_path
 float32 percentage_target_edge_length
+bool convert_to_meters # mm to m conversion if true
 ---
 # Response
 string new_file_path
