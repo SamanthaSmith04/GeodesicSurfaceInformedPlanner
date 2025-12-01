@@ -59,7 +59,7 @@ def fit_parametric_curve(points, smoothing=0.0):
 
 def order_points_nearest_neighbor(points):
     """
-    Order a list of 3D points using the nearest neighbor approach.
+    Order a list of 3D points to produce the shortest path using MST traversal.
     Args:
         points (list of np.array): List of 3D points to order.
     Returns:
@@ -70,35 +70,31 @@ def order_points_nearest_neighbor(points):
     
     points = np.array(points)
     
-    # build MST
+    # Build complete graph with edge weights as distances
     G = nx.Graph()
     for i in range(len(points)):
         for j in range(i + 1, len(points)):
             dist = np.linalg.norm(points[i] - points[j])
             G.add_edge(i, j, weight=dist)
+    
+    # Build MST for approximate shortest path
     mst = nx.minimum_spanning_tree(G)
 
-    # find longest path in MST
+    # Find the two leaves (endpoints) of the MST
     leaves = [node for node in mst.nodes() if mst.degree(node) == 1]
     print(f"leaves len: {len(leaves)}")
-    # Pick the leaf farthest from centroid
+    
+    # Pick the leaf farthest from centroid as starting point
     centroid = points.mean(axis=0)
     leaf_coords = points[leaves]
     dists_to_centroid = np.linalg.norm(leaf_coords - centroid, axis=1)
     start_leaf = leaves[np.argmax(dists_to_centroid)]
     
-
-    points = points.copy()
-    ordered = [points[start_leaf]]
-    points = np.delete(points, 0, axis=0)
+    # Traverse the MST using DFS to get ordered path
+    ordered_indices = list(nx.algorithms.traversal.depth_first_search.dfs_preorder_nodes(mst, source=start_leaf))
     
-    while len(points) > 0:
-        last = ordered[-1]
-        dists = np.linalg.norm(points - last, axis=1)
-        idx = np.argmin(dists)
-        ordered.append(points[idx])
-        points = np.delete(points, idx, axis=0)
-    return np.array(ordered)
+    # Return points in the ordered sequence
+    return points[ordered_indices]
 
 
 def split_isoline_gaps(isoline, max_gap=0.1):

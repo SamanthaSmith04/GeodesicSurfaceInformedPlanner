@@ -226,7 +226,9 @@ class GeodesicPlanner:
             isolines: A list of lists, where each inner list contains the vertices of an isoline at the specified distance.
             isoline_normals: A list of lists, where each inner list contains the normal vectors of the faces corresponding to the isoline vertices.
         '''
-        source_vertices = self.find_source_points(self.mesh)
+        if source_vertices is None or len(source_vertices) == 0:
+            print(f"No source vertices provided, finding default source points.")
+            source_vertices = self.find_source_points(self.mesh)
         distances = self.compute_geodesic_distances(source_vertices)
         if distances is None:
             print("ERROR: Distances are None, cannot compute geodesic paths.")

@@ -10,6 +10,7 @@ import geodesic_planner_ros2.utils as utils
 import visualization_msgs
 from visualization_msgs.msg import Marker, MarkerArray
 
+
 from geodesic_planner_ros2.line_fitting import fit_parametric_curve, split_isoline_gaps, interpolate_path, get_normals, extrapolate_endpoints
 
 class PlannerServer(Node):
@@ -48,7 +49,12 @@ class PlannerServer(Node):
 
         # source_indices = planner.find_nearest_sources(request.sources)
         self.sources.markers = []
-        source_points = planner.find_source_points(planner.mesh)
+        source_points = []
+        if len(request.sources) > 0:
+            for source in request.sources:
+                source_points.append(np.array([source.x, source.y, source.z]))
+        else:
+            source_points = planner.find_source_points(planner.mesh)
         source_msg = visualization_msgs.msg.MarkerArray()
         i = 0
         for source in source_points:
@@ -79,14 +85,14 @@ class PlannerServer(Node):
         self.sources = source_msg
         print(f"Computing geodesic paths from {len(self.sources.markers)} source points.")
 
-        source_points = []
+        # source_points = []
         # for source in source_indices:
         #     source_points.append(np.array(source))
         
 
 
         # get initial geodesic isolines
-        isolines, _ = planner.find_geodesic_paths(request.spacing, source_points)
+        isolines, iso_norms = planner.find_geodesic_paths(request.spacing, source_points)
 
         self.initial_paths.poses = []
         for isoline in isolines:
@@ -142,8 +148,7 @@ class PlannerServer(Node):
 
             print(f"Interpolated {len(points_i)} points with normals.")
             
-            # if idx > 0:
-            #     points_i, norms_i = extrapolate_endpoints(points_i, norms_i, extension_length=0.07, point_spacing=point_spacing)
+            
             interpolated_paths.append(points_i)
             interpolated_normals.append(norms_i)
             idx += 1
@@ -151,6 +156,45 @@ class PlannerServer(Node):
         for norms in interpolated_normals:
             smoothed = self.normals_smoothing(norms)
             norms[:] = smoothed
+
+        
+        ## Apply liftoff to isoline segments
+        for isoline, norm in zip(interpolated_paths, interpolated_normals):
+            for i, point in enumerate(isoline):
+                p = geometry_msgs.msg.Pose()
+                p.position.x = float(point[0])
+                p.position.y = float(point[1])
+                p.position.z = float(point[2])
+                quat = utils.z_align_normal(norm[i][0], norm[i][1], norm[i][2])
+                p.orientation.x = quat[0]
+                p.orientation.y = quat[1]
+                p.orientation.z = quat[2]
+                p.orientation.w = quat[3]
+                pose = utils.calculate_lift(p, request.liftoff)
+                isoline[i] = np.array([pose.position.x, pose.position.y, pose.position.z])
+        
+        # re-interpolate using normals after liftoff
+        interpolated_liftoff_paths = []
+        interpolated_liftoff_normals = []
+        idx = 0
+        for isoline, normals in zip(interpolated_paths, interpolated_normals):
+            if len(isoline) < 3:
+                interpolated_liftoff_paths.append(isoline)
+                interpolated_liftoff_normals.append(normals)
+                idx += 1
+                continue
+            print(f"Re-fitting line to liftoff isoline with {len(isoline)} points.")
+            x,y,z = fit_parametric_curve(isoline, smoothing=0.000)
+            points_i, norms_i = interpolate_path(x, y, z, point_spacing, planner.mesh)
+            print(f"Re-interpolated {len(points_i)} points with normals after liftoff.")
+            if idx > 0:
+                points_i, norms_i = extrapolate_endpoints(points_i, norms_i, extension_length=0.05, point_spacing=point_spacing)
+            interpolated_liftoff_paths.append(points_i)
+            interpolated_liftoff_normals.append(norms_i)
+            idx += 1
+        
+        interpolated_paths = interpolated_liftoff_paths
+        interpolated_normals = interpolated_liftoff_normals
 
         # convert interpolated paths to PoseArray messages
         geodesic_paths = []
