@@ -128,7 +128,34 @@ def split_isoline_gaps(isoline, max_gap=0.1):
 
     return segments
 
+def straight_line_interpolation(start_point, start_normal, end_point, end_normal, point_spacing):
+    """
+    Interpolate points along a straight line between two 3D points.
+    Args:
+        start_point (np.array): Starting 3D point.
+        start_normal (np.array): Normal at the starting point.
+        end_point (np.array): Ending 3D point.
+        end_normal (np.array): Normal at the ending point.
+        point_spacing (float): Desired spacing between interpolated points.
+    Returns:
+        interpolated_points (list of np.array): List of interpolated 3D points.
+        interpolated_normals (list of np.array): List of normals at the interpolated points.
+    """
+    start_point = np.array(start_point)
+    end_point = np.array(end_point)
+    direction = end_point - start_point
+    length = np.linalg.norm(direction)
+    if length == 0:
+        return [start_point], [start_normal]
+    direction = direction / length
 
+    num_points = int(length / point_spacing) + 1
+    if num_points < 2:
+        return [start_point], [start_normal]
+    interpolated_points = [start_point + direction * point_spacing * i for i in range(num_points)]
+    interpolated_normals = [start_normal + (end_normal - start_normal) * (i / (num_points - 1)) for i in range(num_points)]
+
+    return interpolated_points, interpolated_normals
 
 def interpolate_path(x_interp, y_interp, z_interp, point_spacing, mesh):
     """

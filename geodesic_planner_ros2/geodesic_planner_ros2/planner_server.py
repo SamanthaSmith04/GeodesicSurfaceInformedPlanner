@@ -11,7 +11,7 @@ import visualization_msgs
 from visualization_msgs.msg import Marker, MarkerArray
 
 
-from geodesic_planner_ros2.line_fitting import fit_parametric_curve, split_isoline_gaps, interpolate_path, get_normals, extrapolate_endpoints
+from geodesic_planner_ros2.line_fitting import fit_parametric_curve, split_isoline_gaps, interpolate_path, get_normals, extrapolate_endpoints, straight_line_interpolation
 
 class PlannerServer(Node):
     def __init__(self):
@@ -157,9 +157,10 @@ class PlannerServer(Node):
             smoothed = self.normals_smoothing(norms)
             norms[:] = smoothed
 
-        
+        liftoff_segments = []
         ## Apply liftoff to isoline segments
         for isoline, norm in zip(interpolated_paths, interpolated_normals):
+            seg = []
             for i, point in enumerate(isoline):
                 p = geometry_msgs.msg.Pose()
                 p.position.x = float(point[0])
@@ -171,26 +172,32 @@ class PlannerServer(Node):
                 p.orientation.z = quat[2]
                 p.orientation.w = quat[3]
                 pose = utils.calculate_lift(p, request.liftoff)
-                isoline[i] = np.array([pose.position.x, pose.position.y, pose.position.z])
-        
+                seg.append(np.array([pose.position.x, pose.position.y, pose.position.z]))
+            liftoff_segments.append(seg)
+
+        interpolated_paths = liftoff_segments
         # re-interpolate using normals after liftoff
         interpolated_liftoff_paths = []
         interpolated_liftoff_normals = []
         idx = 0
         for isoline, normals in zip(interpolated_paths, interpolated_normals):
-            if len(isoline) < 3:
-                interpolated_liftoff_paths.append(isoline)
-                interpolated_liftoff_normals.append(normals)
-                idx += 1
-                continue
-            print(f"Re-fitting line to liftoff isoline with {len(isoline)} points.")
-            x,y,z = fit_parametric_curve(isoline, smoothing=0.000)
-            points_i, norms_i = interpolate_path(x, y, z, point_spacing, planner.mesh)
+            points = []
+            norms = []
+            for i in range(1, len(isoline)-1):
+                start_point = isoline[i-1]
+                end_point = isoline[i]
+                start_norm = normals[i-1]
+                end_norm = normals[i]
+
+                points_i, norms_i = straight_line_interpolation(start_point, start_norm, end_point, end_norm, point_spacing)
+                points.extend(points_i)
+                norms.extend(norms_i)
+
             print(f"Re-interpolated {len(points_i)} points with normals after liftoff.")
             if idx > 0:
-                points_i, norms_i = extrapolate_endpoints(points_i, norms_i, extension_length=0.05, point_spacing=point_spacing)
-            interpolated_liftoff_paths.append(points_i)
-            interpolated_liftoff_normals.append(norms_i)
+                points, norms = extrapolate_endpoints(points, norms, extension_length=0.05, point_spacing=point_spacing)
+            interpolated_liftoff_paths.append(points)
+            interpolated_liftoff_normals.append(norms)
             idx += 1
         
         interpolated_paths = interpolated_liftoff_paths
