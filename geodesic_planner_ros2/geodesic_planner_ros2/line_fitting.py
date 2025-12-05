@@ -145,15 +145,16 @@ def straight_line_interpolation(start_point, start_normal, end_point, end_normal
     end_point = np.array(end_point)
     direction = end_point - start_point
     length = np.linalg.norm(direction)
-    if length == 0:
+    if length <= point_spacing:
         return [start_point], [start_normal]
+    
     direction = direction / length
 
     num_points = int(length / point_spacing) + 1
     if num_points < 2:
         return [start_point], [start_normal]
-    interpolated_points = [start_point + direction * point_spacing * i for i in range(num_points)]
-    interpolated_normals = [start_normal + (end_normal - start_normal) * (i / (num_points - 1)) for i in range(num_points)]
+    interpolated_points = [start_point + direction * point_spacing * i for i in range(num_points-1)]
+    interpolated_normals = [start_normal + (end_normal - start_normal) * (i / (num_points - 1)) for i in range(num_points-1)]
 
     return interpolated_points, interpolated_normals
 
