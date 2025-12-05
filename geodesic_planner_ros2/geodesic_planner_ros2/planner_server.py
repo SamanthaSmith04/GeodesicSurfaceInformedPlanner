@@ -133,7 +133,7 @@ class PlannerServer(Node):
         interpolated_paths = []
         interpolated_normals = []
 
-        point_spacing = 0.01
+        point_spacing = 0.1
         idx = 0
         for isoline in isoline_segments:
             if len(isoline) < 3:
@@ -157,51 +157,51 @@ class PlannerServer(Node):
             smoothed = self.normals_smoothing(norms)
             norms[:] = smoothed
 
-        liftoff_segments = []
-        ## Apply liftoff to isoline segments
-        for isoline, norm in zip(interpolated_paths, interpolated_normals):
-            seg = []
-            for i, point in enumerate(isoline):
-                p = geometry_msgs.msg.Pose()
-                p.position.x = float(point[0])
-                p.position.y = float(point[1])
-                p.position.z = float(point[2])
-                quat = utils.z_align_normal(norm[i][0], norm[i][1], norm[i][2])
-                p.orientation.x = quat[0]
-                p.orientation.y = quat[1]
-                p.orientation.z = quat[2]
-                p.orientation.w = quat[3]
-                pose = utils.calculate_lift(p, request.liftoff)
-                seg.append(np.array([pose.position.x, pose.position.y, pose.position.z]))
-            liftoff_segments.append(seg)
+        # liftoff_segments = []
+        # ## Apply liftoff to isoline segments
+        # for isoline, norm in zip(interpolated_paths, interpolated_normals):
+        #     seg = []
+        #     for i, point in enumerate(isoline):
+        #         p = geometry_msgs.msg.Pose()
+        #         p.position.x = float(point[0])
+        #         p.position.y = float(point[1])
+        #         p.position.z = float(point[2])
+        #         quat = utils.z_align_normal(norm[i][0], norm[i][1], norm[i][2])
+        #         p.orientation.x = quat[0]
+        #         p.orientation.y = quat[1]
+        #         p.orientation.z = quat[2]
+        #         p.orientation.w = quat[3]
+        #         pose = utils.calculate_lift(p, request.liftoff)
+        #         seg.append(np.array([pose.position.x, pose.position.y, pose.position.z]))
+        #     liftoff_segments.append(seg)
 
-        interpolated_paths = liftoff_segments
-        # re-interpolate using normals after liftoff
-        interpolated_liftoff_paths = []
-        interpolated_liftoff_normals = []
-        idx = 0
-        for isoline, normals in zip(interpolated_paths, interpolated_normals):
-            points = []
-            norms = []
-            for i in range(1, len(isoline)-1):
-                start_point = isoline[i-1]
-                end_point = isoline[i]
-                start_norm = normals[i-1]
-                end_norm = normals[i]
+        # interpolated_paths = liftoff_segments
+        # # re-interpolate using normals after liftoff
+        # interpolated_liftoff_paths = []
+        # interpolated_liftoff_normals = []
+        # idx = 0
+        # for isoline, normals in zip(interpolated_paths, interpolated_normals):
+        #     points = []
+        #     norms = []
+        #     for i in range(1, len(isoline)):
+        #         start_point = isoline[i-1]
+        #         end_point = isoline[i]
+        #         start_norm = normals[i-1]
+        #         end_norm = normals[i]
 
-                points_i, norms_i = straight_line_interpolation(start_point, start_norm, end_point, end_norm, point_spacing)
-                points.extend(points_i)
-                norms.extend(norms_i)
+        #         points_i, norms_i = straight_line_interpolation(start_point, start_norm, end_point, end_norm, point_spacing)
+        #         points.extend(points_i)
+        #         norms.extend(norms_i)
 
-            print(f"Re-interpolated {len(points_i)} points with normals after liftoff.")
-            if idx > 0:
-                points, norms = extrapolate_endpoints(points, norms, extension_length=0.05, point_spacing=point_spacing)
-            interpolated_liftoff_paths.append(points)
-            interpolated_liftoff_normals.append(norms)
-            idx += 1
+        #     print(f"Re-interpolated {len(points_i)} points with normals after liftoff.")
+        #     if idx > 0:
+        #         points, norms = extrapolate_endpoints(points, norms, extension_length=0.05, point_spacing=point_spacing)
+        #     interpolated_liftoff_paths.append(points)
+        #     interpolated_liftoff_normals.append(norms)
+        #     idx += 1
         
-        interpolated_paths = interpolated_liftoff_paths
-        interpolated_normals = interpolated_liftoff_normals
+        # interpolated_paths = interpolated_liftoff_paths
+        # interpolated_normals = interpolated_liftoff_normals
 
         # convert interpolated paths to PoseArray messages
         geodesic_paths = []
