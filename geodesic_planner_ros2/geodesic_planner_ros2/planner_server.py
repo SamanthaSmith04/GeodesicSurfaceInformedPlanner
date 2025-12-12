@@ -311,7 +311,7 @@ class PlannerServer(Node):
             list of np.array: Smoothed normal vectors.
         """
         smoothed_normals = []
-        window_size = 10
+        window_size = 2
         half_window = window_size // 2
         num_normals = len(normals)
 

@@ -315,14 +315,14 @@ class GeodesicPlanner:
         print(f"Found {len(source_points)} source points on the mesh forming a continuous curve.")
         
         # Plot source points on the mesh 
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(mesh.vertices[:,0], mesh.vertices[:,1], mesh.vertices[:,2], color='lightgrey', alpha=0.5, s=1)
-        source_points_np = np.array(source_points)
-        ax.scatter(source_points_np[:,0], source_points_np[:,1], source_points_np[:,2], color='red', s=20, label='Source Points')
-        ax.set_title('Source Points on Mesh (Continuous Curve)')
-        ax.legend()
-        plt.show()
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.scatter(mesh.vertices[:,0], mesh.vertices[:,1], mesh.vertices[:,2], color='lightgrey', alpha=0.5, s=1)
+        # source_points_np = np.array(source_points)
+        # ax.scatter(source_points_np[:,0], source_points_np[:,1], source_points_np[:,2], color='red', s=20, label='Source Points')
+        # ax.set_title('Source Points on Mesh (Continuous Curve)')
+        # ax.legend()
+        # plt.show()
         
         return source_points
 
