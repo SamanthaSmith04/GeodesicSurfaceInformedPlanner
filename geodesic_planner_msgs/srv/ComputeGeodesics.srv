@@ -4,6 +4,8 @@ string mesh_file_path
 geometry_msgs/Point[] sources
 float64 spacing
 
+float64 liftoff
+
 ---
 # Response
 bool success

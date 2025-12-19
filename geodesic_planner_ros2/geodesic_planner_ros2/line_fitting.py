@@ -59,7 +59,7 @@ def fit_parametric_curve(points, smoothing=0.0):
 
 def order_points_nearest_neighbor(points):
     """
-    Order a list of 3D points using the nearest neighbor approach.
+    Order a list of 3D points to produce the shortest path using MST traversal.
     Args:
         points (list of np.array): List of 3D points to order.
     Returns:
@@ -70,35 +70,31 @@ def order_points_nearest_neighbor(points):
     
     points = np.array(points)
     
-    # build MST
+    # Build complete graph with edge weights as distances
     G = nx.Graph()
     for i in range(len(points)):
         for j in range(i + 1, len(points)):
             dist = np.linalg.norm(points[i] - points[j])
             G.add_edge(i, j, weight=dist)
+    
+    # Build MST for approximate shortest path
     mst = nx.minimum_spanning_tree(G)
 
-    # find longest path in MST
+    # Find the two leaves (endpoints) of the MST
     leaves = [node for node in mst.nodes() if mst.degree(node) == 1]
     print(f"leaves len: {len(leaves)}")
-    # Pick the leaf farthest from centroid
+    
+    # Pick the leaf farthest from centroid as starting point
     centroid = points.mean(axis=0)
     leaf_coords = points[leaves]
     dists_to_centroid = np.linalg.norm(leaf_coords - centroid, axis=1)
     start_leaf = leaves[np.argmax(dists_to_centroid)]
     
-
-    points = points.copy()
-    ordered = [points[start_leaf]]
-    points = np.delete(points, 0, axis=0)
+    # Traverse the MST using DFS to get ordered path
+    ordered_indices = list(nx.algorithms.traversal.depth_first_search.dfs_preorder_nodes(mst, source=start_leaf))
     
-    while len(points) > 0:
-        last = ordered[-1]
-        dists = np.linalg.norm(points - last, axis=1)
-        idx = np.argmin(dists)
-        ordered.append(points[idx])
-        points = np.delete(points, idx, axis=0)
-    return np.array(ordered)
+    # Return points in the ordered sequence
+    return points[ordered_indices]
 
 
 def split_isoline_gaps(isoline, max_gap=0.1):
@@ -132,7 +128,35 @@ def split_isoline_gaps(isoline, max_gap=0.1):
 
     return segments
 
+def straight_line_interpolation(start_point, start_normal, end_point, end_normal, point_spacing):
+    """
+    Interpolate points along a straight line between two 3D points.
+    Args:
+        start_point (np.array): Starting 3D point.
+        start_normal (np.array): Normal at the starting point.
+        end_point (np.array): Ending 3D point.
+        end_normal (np.array): Normal at the ending point.
+        point_spacing (float): Desired spacing between interpolated points.
+    Returns:
+        interpolated_points (list of np.array): List of interpolated 3D points.
+        interpolated_normals (list of np.array): List of normals at the interpolated points.
+    """
+    start_point = np.array(start_point)
+    end_point = np.array(end_point)
+    direction = end_point - start_point
+    length = np.linalg.norm(direction)
+    if length <= point_spacing:
+        return [start_point], [start_normal]
+    
+    direction = direction / length
 
+    num_points = int(length / point_spacing) + 1
+    if num_points < 2:
+        return [start_point], [start_normal]
+    interpolated_points = [start_point + direction * point_spacing * i for i in range(num_points-1)]
+    interpolated_normals = [start_normal + (end_normal - start_normal) * (i / (num_points - 1)) for i in range(num_points-1)]
+
+    return interpolated_points, interpolated_normals
 
 def interpolate_path(x_interp, y_interp, z_interp, point_spacing, mesh):
     """
