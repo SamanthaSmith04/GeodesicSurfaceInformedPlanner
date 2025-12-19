@@ -6,3 +6,5 @@ bool convert_to_meters # mm to m conversion if true
 ---
 # Response
 string new_file_path
+string message
+bool success

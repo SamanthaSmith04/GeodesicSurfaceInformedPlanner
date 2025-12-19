@@ -31,6 +31,8 @@ class RemeshingServer(Node):
     ms.save_current_mesh(file_name=new_file_path, save_vertex_normal=True, save_face_color=True)
     response.new_file_path = new_file_path
     self.get_logger().info(f"Remeshed mesh saved to {new_file_path}")
+    response.message = "Remeshing completed successfully."
+    response.success = True
     return response
 
 
