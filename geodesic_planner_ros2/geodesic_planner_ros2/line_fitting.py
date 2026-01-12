@@ -126,7 +126,48 @@ def split_isoline_gaps(isoline, max_gap=0.1):
     if len(current_segment) > 0:
         segments.append(current_segment)
 
-    return segments
+    # check if segments could be merged (if start/end points are close enough)
+    if not segments:
+        return []
+
+    merged = [segments[0]]
+
+    for seg in segments[1:]:
+        last = merged[-1]
+
+        # endpoints
+        a_start, a_end = last[0], last[-1]
+        b_start, b_end = seg[0], seg[-1]
+
+        dists = {
+            "end-start": np.linalg.norm(a_end - b_start),
+            "end-end":   np.linalg.norm(a_end - b_end),
+            "start-start": np.linalg.norm(a_start - b_start),
+            "start-end":   np.linalg.norm(a_start - b_end),
+        }
+
+        case, dist = min(dists.items(), key=lambda x: x[1])
+
+        if dist > max_gap:
+            merged.append(seg)
+            continue
+
+        # apply merge with correct reordering
+        if case == "end-start":
+            merged[-1].extend(seg)
+
+        elif case == "end-end":
+            merged[-1].extend(seg[::-1])
+
+        elif case == "start-start":
+            merged[-1][:] = last[::-1]
+            merged[-1].extend(seg)
+
+        elif case == "start-end":
+            merged[-1][:] = last[::-1]
+            merged[-1].extend(seg[::-1])
+
+    return merged
 
 def straight_line_interpolation(start_point, start_normal, end_point, end_normal, point_spacing):
     """
