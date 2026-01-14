@@ -269,7 +269,7 @@ class GeodesicPlanner:
         max_proj_index = np.argmax(projections)
         
         # Trace a line between min and max projected points
-        line_spacing = 0.1  # spacing between points on the line, larger spacing gives straighter lines
+        line_spacing = 0.15  # spacing between points on the line, larger spacing gives straighter lines
         start_point = mesh.vertices[min_proj_index]
         end_point = mesh.vertices[max_proj_index]
         num_points = int(np.linalg.norm(end_point - start_point) / line_spacing)
