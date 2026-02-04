@@ -209,7 +209,7 @@ class GeodesicPlanner:
         isoline_distance = 0.0
         for i in range(0, max_lines):
             isoline_distance += target_distance
-            print(f"Computing isoline for distance: {isoline_distance}")
+            # print(f"Computing isoline for distance: {isoline_distance}")
             isoline, norms = self.find_single_isoline(isoline_distance, distances)
             isolines.append(isoline)
             isoline_normals.append(norms)
@@ -269,7 +269,7 @@ class GeodesicPlanner:
         max_proj_index = np.argmax(projections)
         
         # Trace a line between min and max projected points
-        line_spacing = 0.1  # spacing between points on the line, larger spacing gives straighter lines
+        line_spacing = 0.15  # spacing between points on the line, larger spacing gives straighter lines
         start_point = mesh.vertices[min_proj_index]
         end_point = mesh.vertices[max_proj_index]
         num_points = int(np.linalg.norm(end_point - start_point) / line_spacing)
@@ -312,7 +312,7 @@ class GeodesicPlanner:
         interpolated_sources.append(source_points[-1])  # add the last point
         source_points = interpolated_sources
 
-        print(f"Found {len(source_points)} source points on the mesh forming a continuous curve.")
+        # print(f"Found {len(source_points)} source points on the mesh forming a continuous curve.")
         
         # Plot source points on the mesh 
         # fig = plt.figure()

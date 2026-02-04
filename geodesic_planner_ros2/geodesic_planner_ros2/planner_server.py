@@ -29,15 +29,17 @@ class PlannerServer(Node):
         self.path_marker_pub = self.create_publisher(visualization_msgs.msg.MarkerArray, 'individual_paths', 10)
         self.publisher = self.create_publisher(geometry_msgs.msg.PoseArray, 'geodesic_paths', 10)
 
+        self.declare_parameter('part_tf_frame', 'world')
+        self.frame_id = self.get_parameter('part_tf_frame').get_parameter_value().string_value
         self.all_markers = visualization_msgs.msg.MarkerArray()
 
         self.initial_paths = geometry_msgs.msg.PoseArray()
-        self.initial_paths.header.frame_id = "world"
+        self.initial_paths.header.frame_id = self.frame_id
 
         self.initial_paths_publisher = self.create_publisher(geometry_msgs.msg.PoseArray, 'initial_geodesic_paths', 10)
 
         self.all_paths = geometry_msgs.msg.PoseArray()
-        self.all_paths.header.frame_id = "world"
+        self.all_paths.header.frame_id = self.frame_id
 
         self.sources = visualization_msgs.msg.MarkerArray()
         self.sources.markers = []
@@ -63,7 +65,7 @@ class PlannerServer(Node):
         i = 0
         for source in source_points:
             marker = visualization_msgs.msg.Marker()
-            marker.header.frame_id = "world"
+            marker.header.frame_id = self.frame_id
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.ns = "source_points"
             marker.id = i
@@ -101,7 +103,7 @@ class PlannerServer(Node):
         self.initial_paths.poses = []
         for isoline in isolines:
             path_msg = geometry_msgs.msg.PoseArray()
-            path_msg.header.frame_id = "world"
+            path_msg.header.frame_id = self.frame_id
             path_msg.header.stamp = self.get_clock().now().to_msg()
             for point in isoline:
                 pose = geometry_msgs.msg.Pose()
@@ -124,7 +126,7 @@ class PlannerServer(Node):
                 isoline_index += 1
                 continue
             segments = split_isoline_gaps(isoline, max_gap=self.max_gap)
-            print(f"Split isoline into {len(segments)} segments.")
+            # print(f"Split isoline into {len(segments)} segments.")
             for segment in segments:
                 seg = []
                 for point in segment:
@@ -140,18 +142,18 @@ class PlannerServer(Node):
         point_spacing = 0.1
         idx = 0
         for isoline in isoline_segments:
-            if len(isoline) < 3:
+            if len(isoline) < 2:
                 interpolated_paths.append(isoline)
                 interpolated_normals.append(get_normals(isoline, planner.mesh))
                 idx += 1
                 continue
-            print(f"Fitting line to isoline with {len(isoline)} points.")
+            # print(f"Fitting line to isoline with {len(isoline)} points.")
             x,y,z = fit_parametric_curve(isoline, smoothing=0.000)
 
             points_i, norms_i = interpolate_path(x, y, z, point_spacing, planner.mesh)
 
-            print(f"Interpolated {len(points_i)} points with normals.")
-            points_i, norms_i = extrapolate_endpoints(points_i, norms_i, extension_length=0.1, point_spacing=point_spacing)
+            # print(f"Interpolated {len(points_i)} points with normals.")
+            points_i, norms_i = extrapolate_endpoints(points_i, norms_i, extension_length=0.1, point_spacing=point_spacing/2.0)
             
             
             interpolated_paths.append(points_i)
@@ -211,11 +213,11 @@ class PlannerServer(Node):
         # convert interpolated paths to PoseArray messages
         geodesic_paths = []
         # convert isolines and normals into pose arrays
-        print(f"len paths: {len(interpolated_paths)}, len normals: {len(interpolated_normals)}")
+        # print(f"len paths: {len(interpolated_paths)}, len normals: {len(interpolated_normals)}")
         for path_points, path_normals in zip(interpolated_paths, interpolated_normals):
-            print(f"Path has {len(path_points)} points and {len(path_normals)} normals.")
+            # print(f"Path has {len(path_points)} points and {len(path_normals)} normals.")
             path_msg = geometry_msgs.msg.PoseArray()
-            path_msg.header.frame_id = "world"
+            path_msg.header.frame_id = self.frame_id
             path_msg.header.stamp = self.get_clock().now().to_msg()
             for i, point in enumerate(path_points):
                 pose = geometry_msgs.msg.Pose()
@@ -238,7 +240,7 @@ class PlannerServer(Node):
         self.get_logger().info('Publishing computed geodesic paths.')
 
         self.all_paths = geometry_msgs.msg.PoseArray()
-        self.all_paths.header.frame_id = "world"
+        self.all_paths.header.frame_id = self.frame_id
         self.all_paths.header.stamp = self.get_clock().now().to_msg()
 
         self.all_markers = visualization_msgs.msg.MarkerArray()
@@ -251,7 +253,7 @@ class PlannerServer(Node):
             # create a line strip marker for this path (color gradient based on index, base color based on current path index)
             for i in range(len(path.poses)-1):
                 marker = visualization_msgs.msg.Marker()
-                marker.header.frame_id = "world"
+                marker.header.frame_id = self.frame_id
                 marker.header.stamp = self.get_clock().now().to_msg()
                 marker.ns = "geodesic_path"
                 marker.id = path_index * 1000 + i
@@ -276,16 +278,16 @@ class PlannerServer(Node):
         self.publisher.publish(self.all_paths)
         self.path_marker_pub.publish(self.all_markers)
 
-        print(f"Ordering {len(interpolated_paths)} paths.")
+        # print(f"Ordering {len(interpolated_paths)} paths.")
         visit_order, ordered_paths, ordered_normals = order_paths(interpolated_paths, planner.mesh, interpolated_normals)
-        print(f"New number of ordered paths: {len(ordered_paths)}, normals: {len(ordered_normals)}")
+        # print(f"New number of ordered paths: {len(ordered_paths)}, normals: {len(ordered_normals)}")
         ordered_markers = visualization_msgs.msg.MarkerArray()
         ordered_markers.markers = []
         for i in range(len(ordered_paths)):
             path = ordered_paths[i]
             for j in range(len(path)-1):
                 marker = visualization_msgs.msg.Marker()
-                marker.header.frame_id = "world"
+                marker.header.frame_id = self.frame_id
                 marker.header.stamp = self.get_clock().now().to_msg()
                 marker.ns = "ordered_geodesic_path"
                 marker.id = i * 1000 + j
@@ -326,11 +328,11 @@ class PlannerServer(Node):
         # convert ordered paths to PoseArray messages
         geodesic_paths = []
         # convert isolines and normals into pose arrays
-        print(f"len paths: {len(ordered_paths)}, len normals: {len(ordered_normals)}")
+        # print(f"len paths: {len(ordered_paths)}, len normals: {len(ordered_normals)}")
         for path_points, path_normals in zip(ordered_paths, ordered_normals):
-            print(f"Path has {len(path_points)} points and {len(path_normals)} normals.")
+            # print(f"Path has {len(path_points)} points and {len(path_normals)} normals.")
             path_msg = geometry_msgs.msg.PoseArray()
-            path_msg.header.frame_id = "world"
+            path_msg.header.frame_id = self.frame_id
             path_msg.header.stamp = self.get_clock().now().to_msg()
             for i, point in enumerate(path_points):
                 pose = geometry_msgs.msg.Pose()
@@ -346,7 +348,7 @@ class PlannerServer(Node):
                 pose.orientation.w = quat[3]
                 path_msg.poses.append(pose)
             geodesic_paths.append(path_msg)
-        
+
         response.geodesic_paths = geodesic_paths
 
         response.success = True
@@ -359,7 +361,7 @@ class PlannerServer(Node):
         if self.mesh_file_path == "":
             return
         marker = visualization_msgs.msg.Marker()
-        marker.header.frame_id = "world"
+        marker.header.frame_id = self.frame_id
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.ns = "mesh"
         marker.id = 0
@@ -403,7 +405,7 @@ class PlannerServer(Node):
             smoothed_normals.append(avg_normal)
 
         return smoothed_normals
-        
+
 def main(args=None):
     rclpy.init(args=args)
     node = PlannerServer()
