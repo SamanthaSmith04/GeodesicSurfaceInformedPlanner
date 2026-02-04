@@ -82,7 +82,7 @@ def order_points_nearest_neighbor(points):
 
     # Find the two leaves (endpoints) of the MST
     leaves = [node for node in mst.nodes() if mst.degree(node) == 1]
-    print(f"leaves len: {len(leaves)}")
+    # print(f"leaves len: {len(leaves)}")
     
     # Pick the leaf farthest from centroid as starting point
     centroid = points.mean(axis=0)

@@ -209,7 +209,7 @@ class GeodesicPlanner:
         isoline_distance = 0.0
         for i in range(0, max_lines):
             isoline_distance += target_distance
-            print(f"Computing isoline for distance: {isoline_distance}")
+            # print(f"Computing isoline for distance: {isoline_distance}")
             isoline, norms = self.find_single_isoline(isoline_distance, distances)
             isolines.append(isoline)
             isoline_normals.append(norms)
@@ -312,7 +312,7 @@ class GeodesicPlanner:
         interpolated_sources.append(source_points[-1])  # add the last point
         source_points = interpolated_sources
 
-        print(f"Found {len(source_points)} source points on the mesh forming a continuous curve.")
+        # print(f"Found {len(source_points)} source points on the mesh forming a continuous curve.")
         
         # Plot source points on the mesh 
         # fig = plt.figure()
