@@ -2,3 +2,4 @@ potpourri3d
 numpy
 trimesh
 matplotlib
+pymeshlab
