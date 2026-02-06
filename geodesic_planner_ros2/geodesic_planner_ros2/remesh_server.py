@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 import rclpy
 from geodesic_planner_msgs.srv import Remesh

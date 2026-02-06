@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 import geometry_msgs
 import rclpy

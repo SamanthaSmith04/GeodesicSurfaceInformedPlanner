@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 import numpy as np
 import potpourri3d as pp3d # https://pypi.org/project/potpourri3d/
