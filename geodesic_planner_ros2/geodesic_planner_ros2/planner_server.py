@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+#!/usr/bin/env python
 import geometry_msgs
 import rclpy
 from rclpy.node import Node

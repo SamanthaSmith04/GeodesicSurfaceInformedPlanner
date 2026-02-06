@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+#!/usr/bin/env python
 import rclpy
 from geodesic_planner_msgs.srv import Remesh
 from rclpy.node import Node
