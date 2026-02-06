@@ -4,3 +4,5 @@ trimesh
 matplotlib
 pyyaml
 scikit-learn
+networkx
+rtree
