@@ -3,3 +3,7 @@ numpy
 trimesh
 matplotlib
 pymeshlab
+pyyaml
+scikit-learn
+networkx
+rtree
