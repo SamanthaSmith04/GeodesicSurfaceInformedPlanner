@@ -82,7 +82,6 @@ def order_points_nearest_neighbor(points):
 
     # Find the two leaves (endpoints) of the MST
     leaves = [node for node in mst.nodes() if mst.degree(node) == 1]
-    # print(f"leaves len: {len(leaves)}")
     
     # Pick the leaf farthest from centroid as starting point
     centroid = points.mean(axis=0)
@@ -231,14 +230,6 @@ def interpolate_path(x_interp, y_interp, z_interp, point_spacing, mesh):
     y_vals = y_interp(t_uniform)
     z_vals = z_interp(t_uniform)
     interpolated_points = [np.array([x, y, z]) for x, y, z in zip(x_vals, y_vals, z_vals)]
-
-    # prune any points in the path that are too close to eachother (regardless of ordering)
-    # pruned_points = [interpolated_points[0]]
-    # for point in interpolated_points[1:]:
-    #     if np.linalg.norm(point - pruned_points[-1]) >= point_spacing * 0.05:
-    #         pruned_points.append(point)
-    # interpolated_points = pruned_points
-
     interpolated_normals = get_normals(interpolated_points, mesh)
 
     return interpolated_points, interpolated_normals

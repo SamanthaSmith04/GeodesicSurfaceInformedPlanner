@@ -68,12 +68,6 @@ class GeodesicPlanner:
             print(f"ERROR in geodesic computation: {e}")
             return None
         
-        # Debug: Print some statistics about the distances
-        # print(f"Min distance: {np.min(distances)}")
-        # print(f"Max distance: {np.max(distances)}")
-        # print(f"Mean distance: {np.mean(distances)}")
-        # print(f"Number of unique distances: {len(np.unique(distances))}")
-        
         return distances
     
     def find_nearest_sources(self, points: list) -> list:
