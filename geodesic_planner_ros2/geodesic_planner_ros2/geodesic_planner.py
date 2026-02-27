@@ -254,7 +254,7 @@ class GeodesicPlanner:
         # PCA to find principal axes
         pca = PCA(n_components=3)
         pca.fit(mesh.vertices)
-        principal_axis = pca.components_[1]  # 
+        principal_axis = pca.components_[2]  # 
         
         # Project vertices onto principal axis
         projections = (mesh.vertices) @ principal_axis
