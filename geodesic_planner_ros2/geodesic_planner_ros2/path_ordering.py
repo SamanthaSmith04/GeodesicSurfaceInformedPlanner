@@ -7,6 +7,9 @@ import numpy as np
 import trimesh
 from trimesh.proximity import closest_point
 import time
+from matplotlib import cm
+import pyvista as pv
+
 
 def pre_process_paths(paths, mesh, normals, max_dist=0.001):
     """
@@ -114,6 +117,33 @@ def greedy_from_start(start_idx, start_ep, cost):
     return order, directions
 
 
+def plot_ordered_paths(mesh, ordered_paths):
+    """
+    Plots a mesh and ordered paths in 3D using PyVista.
+    Mesh keeps its true scaling, and paths are colored by order with a color bar.
+    """
+    plotter = pv.Plotter()
+
+    # ---- Add mesh ----
+    faces = np.hstack([np.full((len(mesh.faces), 1), 3), mesh.faces]).astype(np.int64)
+    pv_mesh = pv.PolyData(mesh.vertices, faces)
+
+    # ---- Add paths with scalars for color bar ----
+    num_paths = len(ordered_paths)
+    for i, path in enumerate(ordered_paths):
+        scalars = np.full(len(path), i)  # assign scalar = path index
+        line = pv.Line(path[0], path[-1], resolution=len(path)-1)
+        line.points[:] = path
+        line.points[:,2] += 0.01
+        plotter.add_mesh(line, scalars=scalars, cmap="viridis", line_width=10, show_scalar_bar=True)
+        # Add start point as small sphere (optional, doesn't need color bar)
+        plotter.add_mesh(pv.Sphere(radius=0.025, center=path[0]), color="white")
+
+    plotter.add_mesh(pv_mesh, color="lightgray", opacity=1.0, show_edges=False)
+    # ---- Preserve true scaling ----
+    plotter.set_scale(1, 1, 1)
+    plotter.enable_parallel_projection()
+    plotter.show()
 
 def order_paths(paths, mesh, normals):
     """
@@ -170,6 +200,7 @@ def order_paths(paths, mesh, normals):
         endpoints,
         on_part
     )
+    # plot_ordered_paths(mesh, ordered_paths)
     return np.array(best_solution[2]), ordered_paths, ordered_normals
 
 def create_new_path_ordered(paths, normals, start, visit_order, endpoints, on_part):
