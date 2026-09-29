@@ -1,0 +1,66 @@
+name: Set Project Start Date
+
+on:
+  issues:
+    types: [edited]
+
+jobs:
+  set-start-date:
+    if: github.event.issue.state == 'open'
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: read
+      repository-projects: write
+
+    steps:
+      - name: Check and set Start date
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api graphql -f query='
+            query($owner:String!, $repo:String!, $issue:Int!) {
+              repository(owner:$owner, name:$repo) {
+                issue(number:$issue) {
+                  projectItems(first:20) {
+                    nodes {
+                      id
+                      project {
+                        id
+                        number
+                        title
+                      }
+                      fieldValues(first:20) {
+                        nodes {
+                          ... on ProjectV2ItemFieldSingleSelectValue {
+                            field {
+                              ... on ProjectV2SingleSelectField {
+                                name
+                              }
+                            }
+                            name
+                          }
+                          ... on ProjectV2ItemFieldDateValue {
+                            field {
+                              ... on ProjectV2Field {
+                                name
+                              }
+                            }
+                            date
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ' \
+          -f owner="${REPO%/*}" \
+          -f repo="${REPO#*/}" \
+          -F issue="$ISSUE_NUMBER" \
+          > project.json
+
+          cat project.json
